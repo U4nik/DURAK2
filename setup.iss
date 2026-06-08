@@ -28,6 +28,7 @@ Source: "stat.ini"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Source: "cards\*"; DestDir: "{app}\cards"; Flags: ignoreversion
 Source: "buttons\*"; DestDir: "{app}\buttons"; Flags: ignoreversion
 Source: "sound\*"; DestDir: "{app}\sound"; Flags: ignoreversion
+Source: "emotion\*"; DestDir: "{app}\emotion"; Flags: ignoreversion
 
 [Icons]
 Name: "{autodesktop}\Дурак"; Filename: "{app}\durak.exe"; Tasks: desktopicon
