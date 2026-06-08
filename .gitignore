@@ -10,7 +10,8 @@
 *.db
 .vs/
 .vscode/
-ахив/
+Р°С…РёРІ/
 Debug/
 Release/
 *.user
+stat.ini
