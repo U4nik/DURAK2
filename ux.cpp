@@ -259,6 +259,35 @@ static float g_actionButtonAlpha = 255.f;     // для fade-анимации
 static bool g_actionButtonFading = false;     // флаг затухания
 static bool g_actionButtonWasVisible = false; // была ли кнопка видима игроку
 
+// ------------------------------------------------------------
+// НАСТРОЙКИ ИГРЫ (game.ini)
+// ------------------------------------------------------------
+static struct {
+    bool card_hint_enabled = true;
+} g_settings;
+
+static void load_settings()
+{
+    std::ifstream f("game.ini");
+    if (!f.is_open())
+        return;
+
+    std::string line;
+    while (std::getline(f, line))
+    {
+        size_t eq = line.find('=');
+        if (eq == std::string::npos)
+            continue;
+
+        std::string key = line.substr(0, eq);
+        int val = std::stoi(line.substr(eq + 1));
+
+        if (key == "card_hint_enabled")
+            g_settings.card_hint_enabled = (val != 0);
+    }
+    f.close();
+}
+
 // UX режим ожидания хода
 static PendingMoves g_pending;
 static UxMode g_uxMode = UxMode::Idle;
@@ -717,6 +746,11 @@ void ux_init(sf::RenderWindow *win)
     if (!g_soundBufferKoloda.loadFromFile("sound/KOLODA.WAV"))
         std::cout << "ERROR loading sound/KOLODA.WAV\n";
     g_soundKoloda.setBuffer(g_soundBufferKoloda);
+
+    // ---------------------------
+    // LOAD SETTINGS
+    // ---------------------------
+    load_settings();
 
     // ---------------------------
     // RESET ANIMATIONS
@@ -1267,7 +1301,7 @@ static void update_hover_effects(
             if (m == s)
                 isValid = true;
 
-        if (isValid)
+        if (isValid && g_settings.card_hint_enabled)
         {
             cv.hovered = true;
             cv.liftOffset = -10.f;
