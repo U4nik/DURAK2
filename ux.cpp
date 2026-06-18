@@ -210,6 +210,12 @@ static sf::Sound g_soundTake;
 static sf::SoundBuffer g_soundBufferKoloda;
 static sf::Sound g_soundKoloda;
 
+static sf::SoundBuffer g_soundBufferRocket;
+static sf::Sound g_soundRocket;
+
+static sf::SoundBuffer g_soundBufferExplosion;
+static sf::Sound g_soundExplosion;
+
 // текст количества карт в колоде
 static sf::Text g_deckCountText;
 
@@ -321,6 +327,7 @@ static sf::Clock g_clock;
 // салют (Game Over)
 static FireworksManager *g_fireworks = nullptr;
 static bool g_gameOverWithFireworks = false; // салют активен в Game Over
+static bool g_rocketSoundPlayed = false; // звук ракеты сыгран 1 раз за сессию
 
 // ------------------------------------------------------------
 // FORWARD DECLARATIONS
@@ -768,6 +775,14 @@ void ux_init(sf::RenderWindow *win)
         std::cout << "ERROR loading sound/KOLODA.WAV\n";
     g_soundKoloda.setBuffer(g_soundBufferKoloda);
 
+    if (!g_soundBufferRocket.loadFromFile("sound/rocket.wav"))
+        std::cout << "ERROR loading sound/rocket.wav\n";
+    g_soundRocket.setBuffer(g_soundBufferRocket);
+
+    if (!g_soundBufferExplosion.loadFromFile("sound/explosion.wav"))
+        std::cout << "ERROR loading sound/explosion.wav\n";
+    g_soundExplosion.setBuffer(g_soundBufferExplosion);
+
     // ---------------------------
     // LOAD SETTINGS
     // ---------------------------
@@ -813,6 +828,13 @@ void ux_init(sf::RenderWindow *win)
 
     // инициализация салюта
     g_fireworks = new FireworksManager(1920.f, 1080.f);
+    g_fireworks->setOnRocketLaunch([]() {
+        if (!g_rocketSoundPlayed) {
+            play_sound(g_soundRocket);
+            g_rocketSoundPlayed = true;
+        }
+    });
+    g_fireworks->setOnExplosion([]() { play_sound(g_soundExplosion); });
 }
 // ------------------------------------------------------------
 // LOAD LAYOUT (layout_game.json в корне EXE)
@@ -2173,6 +2195,7 @@ void ux_run_command(const UxCommand &cmd)
         if (res == "PLR_WIN" && g_fireworks)
         {
             g_gameOverWithFireworks = true;
+            g_rocketSoundPlayed = false;
             g_fireworks->start();
         }
     }

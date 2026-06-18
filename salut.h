@@ -3,6 +3,7 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <deque>
+#include <functional>
 #include <cstdlib>
 #include <ctime>
 
@@ -56,6 +57,10 @@ public:
     // Проверка: активен ли салют
     bool isActive() const;
 
+    // Установка колбэков для звуков
+    void setOnRocketLaunch(std::function<void()> callback);
+    void setOnExplosion(std::function<void()> callback);
+
 private:
     // Запуск одной ракеты
     void launchRocket();
@@ -63,6 +68,9 @@ private:
     // Получение цвета
     sf::Color getShadeFromFamily(int family, float variation);
     
+    std::function<void()> m_onRocketLaunch;
+    std::function<void()> m_onExplosion;
+
     float m_windowWidth;
     float m_windowHeight;
     

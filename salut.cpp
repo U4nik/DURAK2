@@ -65,6 +65,14 @@ FireworksManager::FireworksManager(float windowWidth, float windowHeight)
     std::srand(static_cast<unsigned>(std::time(nullptr)));
 }
 
+void FireworksManager::setOnRocketLaunch(std::function<void()> callback) {
+    m_onRocketLaunch = callback;
+}
+
+void FireworksManager::setOnExplosion(std::function<void()> callback) {
+    m_onExplosion = callback;
+}
+
 void FireworksManager::start() {
     m_active = true;
     m_timeSinceLastLaunch = 0.0f;
@@ -101,6 +109,9 @@ void FireworksManager::launchRocket() {
     r.brightness = 0.1f + (rand() % 100) / 200.0f;
     
     r.maxTrailLength = 10 + rand() % 20;
+    
+    if (m_onRocketLaunch)
+        m_onRocketLaunch();
     
     m_rockets.push_back(r);
 }
@@ -161,6 +172,9 @@ void FireworksManager::update(float dt) {
         
         // Взрыв
         if (it->shape.getPosition().y <= it->targetY) {
+            if (m_onExplosion)
+                m_onExplosion();
+
             sf::Vector2f pos = it->shape.getPosition();
             int numDebris = 60 + rand() % 80;
             
