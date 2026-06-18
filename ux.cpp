@@ -264,6 +264,9 @@ static bool g_actionButtonWasVisible = false; // была ли кнопка ви
 // ------------------------------------------------------------
 static struct {
     bool card_hint_enabled = true;
+    std::string card_sort_mode = "rank";
+    std::string card_sort_direction = "asc";
+    std::string card_sort_trump_position = "none";
 } g_settings;
 
 static void load_settings()
@@ -280,10 +283,16 @@ static void load_settings()
             continue;
 
         std::string key = line.substr(0, eq);
-        int val = std::stoi(line.substr(eq + 1));
+        std::string val = line.substr(eq + 1);
 
         if (key == "card_hint_enabled")
-            g_settings.card_hint_enabled = (val != 0);
+            g_settings.card_hint_enabled = (val != "0");
+        else if (key == "card_sort_mode")
+            g_settings.card_sort_mode = val;
+        else if (key == "card_sort_direction")
+            g_settings.card_sort_direction = val;
+        else if (key == "card_sort_trump_position")
+            g_settings.card_sort_trump_position = val;
     }
     f.close();
 }
@@ -293,6 +302,9 @@ static PendingMoves g_pending;
 static UxMode g_uxMode = UxMode::Idle;
 static int g_chosenMove = -1;
 static bool g_moveReady = false;
+
+// масть козыря (для сортировки)
+static int g_trumpSuit = 0;
 
 // таймер кадра
 static sf::Clock g_clock;
@@ -1048,41 +1060,47 @@ static float easeOutQuad(float t)
 // ------------------------------------------------------------
 // СОРТИРОВКА КАРТ В РУКЕ
 // ------------------------------------------------------------
-enum class SortMode
-{
-    ByRank, // по рангам (6..A)
-    BySuit  // по мастям (c, d, h, s), внутри масти по рангам
-};
-
 static void sort_hand(
     vector<CardVisual> &hand,
     float centerX,
     float y,
-    const vector<float> &anchorsY,
-    SortMode mode)
+    const vector<float> &anchorsY)
 {
     if (hand.size() <= 1)
         return;
 
-    // Сортировка
-    if (mode == SortMode::ByRank)
+    const std::string &mode = g_settings.card_sort_mode;
+    const std::string &dir = g_settings.card_sort_direction;
+    const std::string &trumpPos = g_settings.card_sort_trump_position;
+    int trump = g_trumpSuit;
+
+    std::sort(hand.begin(), hand.end(), [&](const CardVisual &a, const CardVisual &b)
     {
-        std::sort(hand.begin(), hand.end(), [](const CardVisual &a, const CardVisual &b)
-                  {
-                      if (a.card.rank != b.card.rank)
-                          return a.card.rank < b.card.rank;
-                      return a.card.suit < b.card.suit; // при одинаковом ранге — по масти
-                  });
-    }
-    else if (mode == SortMode::BySuit)
-    {
-        std::sort(hand.begin(), hand.end(), [](const CardVisual &a, const CardVisual &b)
-                  {
-                      if (a.card.suit != b.card.suit)
-                          return a.card.suit < b.card.suit;
-                      return a.card.rank < b.card.rank; // внутри масти — по рангам
-                  });
-    }
+        bool aTrump = (a.card.suit == trump);
+        bool bTrump = (b.card.suit == trump);
+
+        // 1. Trump position
+        if (aTrump != bTrump && trumpPos != "none")
+        {
+            if (trumpPos == "left")  return aTrump;  // козыри слева
+            if (trumpPos == "right") return bTrump;  // козыри справа
+        }
+
+        // 2. Сортировка внутри группы
+        bool asc = (dir == "asc");
+
+        if (mode == "suit")
+        {
+            if (a.card.suit != b.card.suit)
+                return asc ? a.card.suit < b.card.suit : a.card.suit > b.card.suit;
+            return asc ? a.card.rank < b.card.rank : a.card.rank > b.card.rank;
+        }
+
+        // mode == "rank"
+        if (a.card.rank != b.card.rank)
+            return asc ? a.card.rank < b.card.rank : a.card.rank > b.card.rank;
+        return asc ? a.card.suit < b.card.suit : a.card.suit > b.card.suit;
+    });
 
     // Пересчитать позиции после сортировки
     layout_hand(hand, centerX, y, anchorsY);
@@ -1888,6 +1906,7 @@ void ux_run_command(const UxCommand &cmd)
     else if (cmd.name == "SET_TRUMP")
     {
         Card c = parse_card(cmd.args[0]);
+        g_trumpSuit = c.suit;
         g_trumpSpr.setTexture(g_cardTex[c.suit][c.rank - 6]);
         g_trumpSpr.setColor(sf::Color(255, 255, 255, 255)); // мгновенно видимый
         g_trumpVisible = true;
@@ -2487,12 +2506,12 @@ void ux_process_frame()
     {
         if (g_pendingSortPlr)
         {
-            sort_hand(g_vis_plr, g_layout.center_x, g_layout.plr_y, g_handAnchorsPlrY, SortMode::ByRank);
+            sort_hand(g_vis_plr, g_layout.center_x, g_layout.plr_y, g_handAnchorsPlrY);
             g_pendingSortPlr = false;
         }
         if (g_pendingSortBot)
         {
-            sort_hand(g_vis_bot, g_layout.center_x, g_layout.bot_y, g_handAnchorsBotY, SortMode::ByRank);
+            sort_hand(g_vis_bot, g_layout.center_x, g_layout.bot_y, g_handAnchorsBotY);
             g_pendingSortBot = false;
         }
     }
