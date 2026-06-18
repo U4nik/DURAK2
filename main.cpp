@@ -1426,6 +1426,12 @@ void print_ux_diff(const State &old, const State &st)
         defender_took_table = true;
         Side taker = old.defender;
 
+        // эмоция: игрок взял → радость, бот взял → печаль
+        if (taker == PLR)
+            ux_cmd("UPDATE_EMOTION", std::vector<std::string>{"JOY"});
+        else
+            ux_cmd("UPDATE_EMOTION", std::vector<std::string>{"SADNESS"});
+
         // Пауза перед анимацией взятия карт со стола
         ux_cmd("WAIT", {"240"});
 
@@ -1440,6 +1446,9 @@ void print_ux_diff(const State &old, const State &st)
     if (!old.table.empty() && st.table.empty() &&
         old.discard.size() < st.discard.size())
     {
+        // защитник отбился — нормал
+        ux_cmd("UPDATE_EMOTION", std::vector<std::string>{"NORMAL"});
+
         ux_cmd("CLEAR_TABLE");
     }
 
@@ -1624,11 +1633,13 @@ void print_ux_diff(const State &old, const State &st)
     else
         ux_cmd("SET_ACTION_BUTTON", std::vector<std::string>{"NONE"});
 
-    // эмоция на основе eval + прогноз минимакса
-    double ev = eval_state(st);
-    string emoName;
-    calc_emotion(ev, is_endgame(st), g_minimaxPredict, emoName);
-    ux_cmd("UPDATE_EMOTION", std::vector<std::string>{emoName});
+    // в эндшпиле — перетираем эмоцию прогнозом минимакса
+    if (is_endgame(st))
+    {
+        string emoName;
+        calc_emotion(eval_state(st), true, g_minimaxPredict, emoName);
+        ux_cmd("UPDATE_EMOTION", std::vector<std::string>{emoName});
+    }
 }
 
 // -------------------------
