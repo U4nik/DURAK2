@@ -195,7 +195,6 @@ static bool g_trumpVisible = true;
 static bool g_deckVisible = true;
 static int g_deckSize = 24;
 
-// звуки
 static sf::SoundBuffer g_soundBufferBito;
 static sf::Sound g_soundBito;
 
@@ -264,6 +263,7 @@ static bool g_actionButtonWasVisible = false; // была ли кнопка ви
 // ------------------------------------------------------------
 static struct {
     bool card_hint_enabled = true;
+    bool sound_effects = true;
     std::string card_sort_mode = "rank";
     std::string card_sort_direction = "asc";
     std::string card_sort_trump_position = "none";
@@ -287,6 +287,8 @@ static void load_settings()
 
         if (key == "card_hint_enabled")
             g_settings.card_hint_enabled = (val != "0");
+        else if (key == "sound_effects")
+            g_settings.sound_effects = (val != "0");
         else if (key == "card_sort_mode")
             g_settings.card_sort_mode = val;
         else if (key == "card_sort_direction")
@@ -295,6 +297,13 @@ static void load_settings()
             g_settings.card_sort_trump_position = val;
     }
     f.close();
+}
+
+// звуки — обёртка с проверкой настройки
+static void play_sound(sf::Sound &s)
+{
+    if (g_settings.sound_effects)
+        s.play();
 }
 
 // UX режим ожидания хода
@@ -1485,7 +1494,7 @@ static void play_card_to_slot(
 static void start_discard_animation(const Layout &L)
 {
     // 0. Воспроизводим звук "Бито!"
-    g_soundBito.play();
+    play_sound(g_soundBito);
 
     // 1. Все карты на столе отправляем в отбой
     for (auto &v : g_tableVisuals)
@@ -1886,8 +1895,7 @@ void ux_run_command(const UxCommand &cmd)
 
     if (cmd.name == "DEAL_CARD")
     {
-        // Воспроизводим звук взятия карты из колоды
-        g_soundFromKol.play();
+        play_sound(g_soundFromKol);
 
         Side s = (cmd.args[0] == "PLR" ? PLR : BOT);
         Card c = parse_card(cmd.args[1]);
@@ -1935,8 +1943,7 @@ void ux_run_command(const UxCommand &cmd)
 
     else if (cmd.name == "TABLE_TO_HAND")
     {
-        // Воспроизводим звук взятия карт со стола
-        g_soundTake.play();
+        play_sound(g_soundTake);
 
         Side taker = (cmd.args[0] == "PLR" ? PLR : BOT);
 
@@ -1951,14 +1958,12 @@ void ux_run_command(const UxCommand &cmd)
 
     else if (cmd.name == "PLAY_KOLODA_SOUND")
     {
-        // Воспроизводим звук колоды
-        g_soundKoloda.play();
+        play_sound(g_soundKoloda);
     }
 
     else if (cmd.name == "PLAY_ATTACK")
     {
-        // Воспроизводим звук хода картой на стол
-        g_soundFallDown.play();
+        play_sound(g_soundFallDown);
 
         Side s = (cmd.args[0] == "PLR" ? PLR : BOT);
         Card c = parse_card(cmd.args[1]);
@@ -1987,8 +1992,7 @@ void ux_run_command(const UxCommand &cmd)
 
     else if (cmd.name == "PLAY_DEFENSE")
     {
-        // Воспроизводим звук хода картой на стол
-        g_soundFallDown.play();
+        play_sound(g_soundFallDown);
 
         Side s = (cmd.args[0] == "PLR" ? PLR : BOT);
         Card c = parse_card(cmd.args[1]);
@@ -2022,8 +2026,7 @@ void ux_run_command(const UxCommand &cmd)
 
     else if (cmd.name == "DEAL_PREVOISE_TRUMP")
     {
-        // Воспроизводим звук взятия карты из колоды
-        g_soundFromKol.play();
+        play_sound(g_soundFromKol);
 
         Side s = (cmd.args[0] == "PLR" ? PLR : BOT);
         Card c = parse_card(cmd.args[1]);
@@ -2043,8 +2046,7 @@ void ux_run_command(const UxCommand &cmd)
 
     else if (cmd.name == "DEAL_LAST_TRUMP")
     {
-        // Воспроизводим звук взятия карты из колоды
-        g_soundFromKol.play();
+        play_sound(g_soundFromKol);
 
         Side s = (cmd.args[0] == "PLR" ? PLR : BOT);
         Card c = parse_card(cmd.args[1]);

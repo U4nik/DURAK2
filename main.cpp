@@ -1952,8 +1952,24 @@ vector<Move> generate_moves(const State &st)
     return res.moves;
 }
 
+// --- тайм-бюджет для минимакса (итеративное углубление) ---
+static std::chrono::steady_clock::time_point g_mm_deadline =
+    std::chrono::steady_clock::now();
+static bool g_mm_deadline_active = false;
+static bool g_mm_timed_out = false;
+static inline bool mm_check_timeout()
+{
+    if (!g_mm_deadline_active || g_mm_timed_out)
+        return g_mm_timed_out;
+    if (std::chrono::steady_clock::now() >= g_mm_deadline)
+        g_mm_timed_out = true;
+    return g_mm_timed_out;
+}
+
 double minimax(State &st, int depth, double alpha, double beta, bool maximizingPlayer)
 {
+    if (mm_check_timeout())
+        return eval_state(st);
     if (depth == 0)
         return eval_state(st);
 
@@ -2381,23 +2397,71 @@ Move endgame_choose(State &st)
 {
     cout << "=== MINIMAX ACTIVATED ===\n";
 
-    int depth = 15; // нужен подбор
-    double bestVal = -1e9;
-    Move bestMove;
+    const double TIME_BUDGET = 1.5;     // секунды на весь поиск
+    const int    MAX_DEPTH   = 15;     // верхняя граница глубины
 
     auto moves = generate_moves(st);
-    for (auto &m : moves)
-    {
-        State next = apply_move(st, m);
-        bool nextMax = (next.actor == BOT);
-        double val = minimax(next, depth - 1, -1e9, 1e9, nextMax);
+    if (moves.empty())
+        return Move::Pass();
 
-        if (val > bestVal)
+    // Активируем тайм-бюджет
+    g_mm_deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::milliseconds((int)(TIME_BUDGET * 1000));
+    g_mm_deadline_active = true;
+    g_mm_timed_out = false;
+
+    Move bestMove = moves[0];
+    double bestVal = -1e9;
+    bool have_result = false;
+
+    // Итеративное углубление: всегда держим лучший ход
+    // из последней полностью завершённой глубины.
+    for (int depth = 1; depth <= MAX_DEPTH; depth++)
+    {
+        double depthBestVal = -1e9;
+        Move depthBestMove = moves[0];
+        bool completed = true;
+
+        for (auto &m : moves)
         {
-            bestVal = val;
-            bestMove = m;
+            State next = apply_move(st, m);
+            bool nextMax = (next.actor == BOT);
+            double val = minimax(next, depth - 1, -1e9, 1e9, nextMax);
+
+            if (g_mm_timed_out) { completed = false; break; }
+
+            if (val > depthBestVal)
+            {
+                depthBestVal = val;
+                depthBestMove = m;
+            }
         }
+
+        if (completed)
+        {
+            bestVal = depthBestVal;
+            bestMove = depthBestMove;
+            have_result = true;
+            cout << "[minimax] depth " << depth
+                 << " done, val=" << bestVal << "\n";
+        }
+        else
+        {
+            cout << "[minimax] timeout at depth " << depth
+                 << ", using depth " << (depth - 1) << "\n";
+            break;
+        }
+
+        if (g_mm_timed_out) break;
     }
+
+    // Отключаем тайм-бюджет — вне endgame_choose минимакс работает без ограничений
+    g_mm_deadline_active = false;
+    g_mm_timed_out = false;
+
+    if (!have_result)
+        cout << "[minimax] WARNING: no completed depth, using fallback move\n";
 
     // --- ПРОГНОЗ ---
     if (bestVal >= 7000)
