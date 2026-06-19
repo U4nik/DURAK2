@@ -10,6 +10,7 @@
 #include <windows.h>
 #include "ux.h"
 #include "salut.h"
+#include "rules_text.h"
 using namespace std;
 
 // ------------------------------------------------------------
@@ -327,6 +328,20 @@ static struct {
 static int  g_setHoveredItem = -1;
 static bool g_setResetConfirm = false;  // подтверждение сброса статистики
 
+// ------------------------------------------------------------
+// ПРАВИЛА — сцена Rules
+// ------------------------------------------------------------
+static struct {
+    sf::Vector2f titlePos;      int titleSize;
+    sf::Vector2f areaPos;       int areaWidth;   int areaFontSize;
+    float areaLineSpacing;
+    sf::Vector2f menuPos;
+} g_rulesLayout;
+
+static int g_rulesHoveredItem = -1;
+static bool g_rulesLayoutLoaded = false;
+static sf::RectangleShape g_rulesBgRect;
+
 // состояние action-кнопки
 static std::string g_actionButtonState = "NONE";
 static float g_actionButtonAlpha = 255.f;     // для fade-анимации
@@ -383,6 +398,8 @@ static void save_settings()
     f << "card_sort_direction=" << g_settings.card_sort_direction << "\n";
     f << "card_sort_trump_position=" << g_settings.card_sort_trump_position << "\n";
 }
+
+static void load_rules_screen_layout(); // forward
 
 static void reset_stats(); // forward decl — impl after save_stats()
 
@@ -479,6 +496,83 @@ static void load_settings_screen_layout()
             }
         }
     }
+}
+
+static void load_rules_screen_layout()
+{
+    g_rulesLayout.titlePos = {960.f, 100.f};    g_rulesLayout.titleSize = 64;
+    g_rulesLayout.areaPos = {960.f, 520.f};     g_rulesLayout.areaWidth = 1400;
+    g_rulesLayout.areaFontSize = 28;            g_rulesLayout.areaLineSpacing = 1.5f;
+    g_rulesLayout.menuPos = {960.f, 980.f};
+
+    std::ifstream f("layout_scenes.json");
+    if (!f.is_open()) return;
+
+    std::string json((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+
+    auto getVal = [&](const std::string &key, size_t start) -> float
+    {
+        size_t p = json.find(key, start);
+        if (p == std::string::npos) return 0;
+        p = json.find(":", p);
+        size_t end = json.find_first_of(",}", p + 1);
+        return std::stof(json.substr(p + 1, end - (p + 1)));
+    };
+
+    size_t ss = json.find("\"rules_screen\"");
+    if (ss == std::string::npos) return;
+
+    // title
+    size_t t = json.find("\"title\"", ss);
+    if (t != std::string::npos)
+    {
+        g_rulesLayout.titlePos.x = getVal("\"x\"", t);
+        g_rulesLayout.titlePos.y = getVal("\"y\"", t);
+        g_rulesLayout.titleSize = (int)getVal("\"size\"", t);
+    }
+
+    // text_area
+    size_t a = json.find("\"text_area\"", ss);
+    if (a != std::string::npos)
+    {
+        g_rulesLayout.areaPos.x = getVal("\"x\"", a);
+        g_rulesLayout.areaPos.y = getVal("\"y\"", a);
+        g_rulesLayout.areaWidth = (int)getVal("\"width\"", a);
+        g_rulesLayout.areaFontSize = (int)getVal("\"size\"", a);
+        g_rulesLayout.areaLineSpacing = getVal("\"line_spacing\"", a);
+    }
+
+    // menu (back)
+    size_t m = json.find("\"menu\"", ss);
+    if (m != std::string::npos)
+    {
+        size_t arrStart = json.find("[", m);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != std::string::npos && arrEnd != std::string::npos)
+        {
+            std::string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            size_t p = 0;
+            size_t xKey = arr.find("\"x\"", p);
+            if (xKey != std::string::npos)
+            {
+                g_rulesLayout.menuPos.x = getVal("\"x\"", arrStart + p);
+                g_rulesLayout.menuPos.y = getVal("\"y\"", arrStart + p);
+            }
+        }
+    }
+
+    g_rulesLayoutLoaded = true;
+
+    // инициализация полупрозрачного прямоугольника
+    // вычислим высоту: кол-во строк * кегль * line_spacing
+    int lineCount = 1;
+    for (auto ch : RULES_TEXT)
+        if (ch == L'\n') lineCount++;
+    float h = lineCount * g_rulesLayout.areaFontSize * g_rulesLayout.areaLineSpacing;
+    g_rulesBgRect.setSize(sf::Vector2f((float)g_rulesLayout.areaWidth, h));
+    g_rulesBgRect.setFillColor(sf::Color(50, 50, 50, 200));
+    g_rulesBgRect.setOrigin(g_rulesLayout.areaWidth / 2.f, h / 2.f);
+    g_rulesBgRect.setPosition(g_rulesLayout.areaPos);
 }
 
 // звуки — обёртка с проверкой настройки
@@ -1028,6 +1122,7 @@ void ux_init(sf::RenderWindow *win)
     // ---------------------------------------------------------
     load_start_screen_layout();
     load_settings_screen_layout();
+    load_rules_screen_layout();
 
     // Заголовок
     g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
@@ -2107,6 +2202,19 @@ static void ux_handle_events()
                 }
             }
 
+            // hover на сцене правил
+            if (g_uxMode == UxMode::Rules)
+            {
+                g_rulesHoveredItem = -1;
+                g_scMenuText.setString(L"Возврат в основное меню");
+                g_scMenuText.setCharacterSize(48);
+                auto b = g_scMenuText.getLocalBounds();
+                g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                g_scMenuText.setPosition(g_rulesLayout.menuPos);
+                if (g_scMenuText.getGlobalBounds().contains(mp))
+                    g_rulesHoveredItem = 0;
+            }
+
             // закрытие окна (крестик)
         if (e.type == sf::Event::Closed)
         {
@@ -2420,7 +2528,13 @@ static void ux_handle_events()
             // клик на сцене правил
             else if (g_uxMode == UxMode::Rules)
             {
-                g_uxMode = UxMode::StartScreen;
+                g_scMenuText.setString(L"Возврат в основное меню");
+                g_scMenuText.setCharacterSize(48);
+                auto mb = g_scMenuText.getLocalBounds();
+                g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
+                g_scMenuText.setPosition(g_rulesLayout.menuPos);
+                if (g_scMenuText.getGlobalBounds().contains(mp))
+                    g_uxMode = UxMode::StartScreen;
             }
             // клик на сцене об авторах
             else if (g_uxMode == UxMode::Authors)
@@ -3048,17 +3162,47 @@ static void ux_draw_frame()
         }
         else if (g_uxMode == UxMode::Rules)
         {
-            static sf::Text scRulesText;
-            scRulesText.setFont(g_font);
-            scRulesText.setCharacterSize(48);
-            scRulesText.setFillColor(sf::Color(255, 165, 0));
-            scRulesText.setOutlineColor(sf::Color::Black);
-            scRulesText.setOutlineThickness(2.5f);
-            scRulesText.setString(L"ПРАВИЛА ИГРЫ (кликните чтобы вернуться)");
-            auto rb = scRulesText.getLocalBounds();
-            scRulesText.setOrigin(rb.width / 2.f, rb.height / 2.f);
-            scRulesText.setPosition(960.f, 540.f);
-            g_window->draw(scRulesText);
+            // серый полупрозрачный фон под текст
+            g_window->draw(g_rulesBgRect);
+
+            // заголовок
+            g_scTitleText.setString(L"ПРАВИЛА ИГРЫ");
+            g_scTitleText.setCharacterSize(g_rulesLayout.titleSize);
+            auto tb = g_scTitleText.getLocalBounds();
+            g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
+            g_scTitleText.setPosition(g_rulesLayout.titlePos);
+            g_window->draw(g_scTitleText);
+
+            // текст правил (без обводки, светло-серый)
+            static sf::Text rulesText;
+            rulesText.setFont(g_font);
+            rulesText.setString(RULES_TEXT);
+            rulesText.setCharacterSize(g_rulesLayout.areaFontSize);
+            rulesText.setFillColor(sf::Color(220, 220, 220));
+            rulesText.setOutlineThickness(0);
+            rulesText.setLineSpacing(g_rulesLayout.areaLineSpacing);
+            auto rb = rulesText.getLocalBounds();
+            rulesText.setOrigin(rb.width / 2.f, rb.height / 2.f);
+            rulesText.setPosition(g_rulesLayout.areaPos);
+            g_window->draw(rulesText);
+
+            // меню "Возврат в основное меню"
+            g_scMenuText.setString(L"Возврат в основное меню");
+            g_scMenuText.setCharacterSize(48);
+            auto mb = g_scMenuText.getLocalBounds();
+            g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
+            g_scMenuText.setPosition(g_rulesLayout.menuPos);
+            if (g_rulesHoveredItem == 0)
+            {
+                g_scMenuText.setOutlineThickness(4.f);
+                g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+            }
+            else
+            {
+                g_scMenuText.setOutlineThickness(2.5f);
+                g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+            }
+            g_window->draw(g_scMenuText);
         }
         else if (g_uxMode == UxMode::Authors)
         {
