@@ -273,6 +273,21 @@ static sf::Texture g_scLogoTexture;
 static sf::Sprite g_scLogoSprite;
 static bool g_scLogoLoaded = false;
 
+// 6 карт-пар на StartScreen (3 пары, левая сторона)
+static std::vector<sf::Sprite> g_scCards;
+static bool g_scCardsInit = false;
+
+// StartScreen layout (заполняется load_start_screen_layout)
+static struct {
+    sf::Vector2f titlePos;
+    int titleSize;
+    sf::Vector2f logoPos;
+    float logoScale;
+    std::string logoFile;
+    std::vector<sf::Vector2f> menuPos;
+    std::vector<sf::Vector2f> cardsPos;
+} g_scLayout;
+
 // меню на StartScreen (canResume=false — главное меню)
 static const int SC_MAIN_COUNT = 4;
 static const wchar_t* SC_MAIN_ITEMS[SC_MAIN_COUNT] = {
@@ -364,6 +379,7 @@ static bool g_rocketSoundPlayed = false; // звук ракеты сыгран 1
 // FORWARD DECLARATIONS
 // ------------------------------------------------------------
 static Layout load_layout();
+static void load_start_screen_layout();
 
 static void layout_hand(
     vector<CardVisual> &hand,
@@ -714,14 +730,10 @@ void ux_init(sf::RenderWindow *win)
     g_scMenuText.setOutlineColor(sf::Color::Black);
     g_scMenuText.setOutlineThickness(2.5f);
 
-    // StartScreen — лого
-    g_scLogoLoaded = g_scLogoTexture.loadFromFile("emotion/logo_start_game3.png");
-    if (g_scLogoLoaded)
-    {
-        g_scLogoSprite.setTexture(g_scLogoTexture);
-        g_scLogoSprite.setScale(0.3f, 0.3f);
-        g_scLogoSprite.setPosition(1720.f, 780.f);
-    }
+    // StartScreen — лого (текстура загрузится после карт)
+    g_scLogoLoaded = false;
+    
+    // карты StartScreen — инициализируются после загрузки текстур карт
 
     // ---------------------------
     // LOAD CARD TEXTURES
@@ -872,6 +884,44 @@ void ux_init(sf::RenderWindow *win)
     // На старте скрываем козырь и кнопку
     g_trumpSpr.setColor(sf::Color(255, 255, 255, 0));
     g_sprAction.setColor(sf::Color(255, 255, 255, 0));
+
+    // ---------------------------------------------------------
+    // START SCREEN INIT (после загрузки карт и звуков)
+    // ---------------------------------------------------------
+    load_start_screen_layout();
+
+    // Заголовок
+    g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
+    // позиция задаётся в draw из g_scLayout
+
+    // Лого
+    g_scLogoLoaded = g_scLogoTexture.loadFromFile(g_scLayout.logoFile);
+    if (g_scLogoLoaded)
+    {
+        g_scLogoSprite.setTexture(g_scLogoTexture);
+        g_scLogoSprite.setScale(g_scLayout.logoScale, g_scLayout.logoScale);
+        g_scLogoSprite.setPosition(g_scLayout.logoPos);
+    }
+
+    // 6 случайных карт (3 пары слева)
+    g_scCards.clear();
+    {
+        std::vector<int> idxs(36);
+        for (int i = 0; i < 36; i++) idxs[i] = i;
+        std::shuffle(idxs.begin(), idxs.end(), std::mt19937((unsigned)time(nullptr)));
+        for (int i = 0; i < 6 && i < (int)g_scLayout.cardsPos.size(); i++)
+        {
+            int cardIdx = idxs[i];
+            int suit = cardIdx / 9;
+            int rank = 6 + (cardIdx % 9);
+            sf::Sprite spr;
+            spr.setTexture(g_cardTex[suit][rank - 6]);
+            spr.setOrigin(62, 90);
+            spr.setPosition(g_scLayout.cardsPos[i]);
+            g_scCards.push_back(spr);
+        }
+    }
+    g_scCardsInit = true;
 
     // инициализация салюта
     g_fireworks = new FireworksManager(1920.f, 1080.f);
@@ -1075,6 +1125,109 @@ static Layout load_layout()
     }
 
     return L;
+}
+
+static void load_start_screen_layout()
+{
+    g_scLayout.titlePos = {960.f, 120.f};
+    g_scLayout.titleSize = 80;
+    g_scLayout.logoPos = {1650.f, 820.f};
+    g_scLayout.logoScale = 0.45f;
+    g_scLayout.menuPos = {
+        {960.f, 380.f}, {960.f, 460.f}, {960.f, 540.f},
+        {960.f, 620.f}, {960.f, 700.f}
+    };
+    g_scLayout.cardsPos = {
+        {150.f, 280.f}, {220.f, 280.f}, {150.f, 460.f},
+        {220.f, 460.f}, {150.f, 640.f}, {220.f, 640.f}
+    };
+
+    ifstream f("layout_scenes.json");
+    if (!f.is_open())
+    {
+        cout << "NO JSON layout_scenes.json\n";
+        return;
+    }
+
+    string json((istreambuf_iterator<char>(f)), istreambuf_iterator<char>());
+
+    auto getVal = [&](const string &key, size_t start) -> float
+    {
+        size_t p = json.find(key, start);
+        if (p == string::npos) return 0;
+        p = json.find(":", p);
+        size_t end = json.find_first_of(",}", p + 1);
+        return stof(json.substr(p + 1, end - (p + 1)));
+    };
+
+    // start_screen section
+    size_t ss = json.find("\"start_screen\"");
+    if (ss == string::npos) return;
+
+    // title
+    size_t t = json.find("\"title\"", ss);
+    if (t != string::npos)
+    {
+        g_scLayout.titlePos.x = getVal("\"x\"", t);
+        g_scLayout.titlePos.y = getVal("\"y\"", t);
+        g_scLayout.titleSize = (int)getVal("\"size\"", t);
+    }
+
+    // logo
+    size_t l = json.find("\"logo\"", ss);
+    if (l != string::npos)
+    {
+        g_scLayout.logoFile = "emotion/logo_start_game3.png";
+        g_scLayout.logoPos.x = getVal("\"x\"", l);
+        g_scLayout.logoPos.y = getVal("\"y\"", l);
+        g_scLayout.logoScale = getVal("\"scale\"", l);
+    }
+
+    // menu items
+    size_t m = json.find("\"menu\"", ss);
+    if (m != string::npos)
+    {
+        size_t arrStart = json.find("[", m);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != string::npos && arrEnd != string::npos)
+        {
+            string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            g_scLayout.menuPos.clear();
+            size_t p = 0;
+            while (true)
+            {
+                size_t xKey = arr.find("\"x\"", p);
+                if (xKey == string::npos) break;
+                float xv = getVal("\"x\"", arrStart + p);
+                float yv = getVal("\"y\"", arrStart + p);
+                g_scLayout.menuPos.push_back({xv, yv});
+                p = arr.find("}", xKey) + 1;
+            }
+        }
+    }
+
+    // cards
+    size_t c = json.find("\"cards\"", ss);
+    if (c != string::npos)
+    {
+        size_t arrStart = json.find("[", c);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != string::npos && arrEnd != string::npos)
+        {
+            string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            g_scLayout.cardsPos.clear();
+            size_t p = 0;
+            while (true)
+            {
+                size_t xKey = arr.find("\"x\"", p);
+                if (xKey == string::npos) break;
+                float xv = getVal("\"x\"", arrStart + p);
+                float yv = getVal("\"y\"", arrStart + p);
+                g_scLayout.cardsPos.push_back({xv, yv});
+                p = arr.find("}", xKey) + 1;
+            }
+        }
+    }
 }
 
 // ------------------------------------------------------------
@@ -1824,15 +1977,19 @@ static void ux_handle_events()
             // клик на стартовой сцене
             else if (g_uxMode == UxMode::StartScreen)
             {
-                float menuY = 380.f;
                 if (g_scCanResume)
                 {
+                    // in-game: Resume(0), Back(4)
+                    int indices[] = {0, 4};
                     for (int i = 0; i < SC_RESUME_COUNT; i++)
                     {
+                        int idx = indices[i];
+                        if (idx >= (int)g_scLayout.menuPos.size())
+                            idx = (int)g_scLayout.menuPos.size() - 1;
                         g_scMenuText.setString(SC_RESUME_ITEMS[i]);
                         auto b = g_scMenuText.getLocalBounds();
                         g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(960.f, menuY);
+                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
 
                         if (g_scMenuText.getGlobalBounds().contains(mp))
                         {
@@ -1847,17 +2004,20 @@ static void ux_handle_events()
                             }
                             break;
                         }
-                        menuY += 80.f;
                     }
                 }
                 else
                 {
+                    // главное меню: NewGame(1), Settings(2), Rules(3), Authors(4)
                     for (int i = 0; i < SC_MAIN_COUNT; i++)
                     {
+                        int idx = i + 1;
+                        if (idx >= (int)g_scLayout.menuPos.size())
+                            idx = (int)g_scLayout.menuPos.size() - 1;
                         g_scMenuText.setString(SC_MAIN_ITEMS[i]);
                         auto b = g_scMenuText.getLocalBounds();
                         g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(960.f, menuY);
+                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
 
                         if (g_scMenuText.getGlobalBounds().contains(mp))
                         {
@@ -1879,7 +2039,6 @@ static void ux_handle_events()
                             }
                             break;
                         }
-                        menuY += 80.f;
                     }
                 }
             }
@@ -2324,36 +2483,54 @@ static void ux_draw_frame()
         // 2. Заголовок (только на StartScreen)
         if (g_uxMode == UxMode::StartScreen)
         {
+            // 6 карт-пар слева (только на главном меню)
+            if (g_scCardsInit && !g_scCanResume)
+            {
+                for (auto &spr : g_scCards)
+                    g_window->draw(spr);
+            }
+
+            // позиция из layout
+            g_scTitleText.setOrigin(0, 0);
+            auto tb = g_scTitleText.getLocalBounds();
+            g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
+            g_scTitleText.setPosition(g_scLayout.titlePos);
             g_window->draw(g_scTitleText);
 
             // 3. Лого
             if (g_scLogoLoaded)
                 g_window->draw(g_scLogoSprite);
 
-            // 4. Меню
-            float menuY = 380.f;
+            // 4. Меню из layout
             if (g_scCanResume)
             {
+                // in-game: Resume (0), Back (4)
+                int indices[] = {0, 4};
                 for (int i = 0; i < SC_RESUME_COUNT; i++)
                 {
+                    int idx = indices[i];
+                    if (idx >= (int)g_scLayout.menuPos.size())
+                        idx = (int)g_scLayout.menuPos.size() - 1;
                     g_scMenuText.setString(SC_RESUME_ITEMS[i]);
                     auto b = g_scMenuText.getLocalBounds();
                     g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                    g_scMenuText.setPosition(960.f, menuY);
+                    g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
                     g_window->draw(g_scMenuText);
-                    menuY += 80.f;
                 }
             }
             else
             {
+                // главное меню: NewGame(1), Settings(2), Rules(3), Authors(4)
                 for (int i = 0; i < SC_MAIN_COUNT; i++)
                 {
+                    int idx = i + 1;
+                    if (idx >= (int)g_scLayout.menuPos.size())
+                        idx = (int)g_scLayout.menuPos.size() - 1;
                     g_scMenuText.setString(SC_MAIN_ITEMS[i]);
                     auto b = g_scMenuText.getLocalBounds();
                     g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                    g_scMenuText.setPosition(960.f, menuY);
+                    g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
                     g_window->draw(g_scMenuText);
-                    menuY += 80.f;
                 }
             }
 

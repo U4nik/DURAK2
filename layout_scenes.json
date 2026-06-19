@@ -1,8 +1,16 @@
 {
   "style": {
     "font_size": 48,
-    "font_color": { "r": 255, "g": 165, "b": 0 },
-    "outline_color": { "r": 0, "g": 0, "b": 0 },
+    "font_color": {
+      "r": 255,
+      "g": 165,
+      "b": 0
+    },
+    "outline_color": {
+      "r": 0,
+      "g": 0,
+      "b": 0
+    },
     "outline_thickness": 2.5
   },
   "start_screen": {
@@ -14,24 +22,68 @@
     },
     "logo": {
       "file": "emotion/logo_start_game3.png",
-      "x": 1650,
-      "y": 820,
-      "scale": 0.45
+      "x": 1400,
+      "y": 580,
+      "scale": 0.5
     },
     "menu": [
-      { "id": "resume",    "x": 960, "y": 380 },
-      { "id": "new_game",  "x": 960, "y": 460 },
-      { "id": "settings",  "x": 960, "y": 540 },
-      { "id": "rules",     "x": 960, "y": 620 },
-      { "id": "authors",   "x": 960, "y": 700 }
+      {
+        "id": "resume",
+        "x": 960,
+        "y": 380
+      },
+      {
+        "id": "new_game",
+        "x": 960,
+        "y": 460
+      },
+      {
+        "id": "settings",
+        "x": 960,
+        "y": 540
+      },
+      {
+        "id": "rules",
+        "x": 960,
+        "y": 620
+      },
+      {
+        "id": "authors",
+        "x": 960,
+        "y": 700
+      }
     ],
     "cards": [
-      { "x": 150, "y": 280, "angle": -10 },
-      { "x": 220, "y": 300, "angle": 8 },
-      { "x": 150, "y": 470, "angle": -7 },
-      { "x": 220, "y": 490, "angle": 6 },
-      { "x": 150, "y": 660, "angle": -5 },
-      { "x": 220, "y": 680, "angle": 4 }
+      {
+        "x": 150,
+        "y": 280,
+        "angle": -10
+      },
+      {
+        "x": 220,
+        "y": 300,
+        "angle": 8
+      },
+      {
+        "x": 150,
+        "y": 490,
+        "angle": -7
+      },
+      {
+        "x": 220,
+        "y": 510,
+        "angle": 6
+      },
+      {
+        "x": 150,
+        "y": 700,
+        "angle": -5
+      },
+      {
+        "x": 220,
+        "y": 720,
+        "angle": 4
+      }
     ]
   },
   "settings_screen": {
@@ -54,13 +106,41 @@
       "scale": 0.25
     },
     "menu": [
-      { "id": "back",     "x": 960, "y": 300 },
-      { "id": "trump_pos","x": 960, "y": 380 },
-      { "id": "direction","x": 960, "y": 450 },
-      { "id": "sort_mode","x": 960, "y": 520 },
-      { "id": "sound",    "x": 960, "y": 600 },
-      { "id": "hint",     "x": 960, "y": 670 },
-      { "id": "reset_stats","x": 960, "y": 760 }
+      {
+        "id": "back",
+        "x": 960,
+        "y": 300
+      },
+      {
+        "id": "trump_pos",
+        "x": 960,
+        "y": 380
+      },
+      {
+        "id": "direction",
+        "x": 960,
+        "y": 450
+      },
+      {
+        "id": "sort_mode",
+        "x": 960,
+        "y": 520
+      },
+      {
+        "id": "sound",
+        "x": 960,
+        "y": 600
+      },
+      {
+        "id": "hint",
+        "x": 960,
+        "y": 670
+      },
+      {
+        "id": "reset_stats",
+        "x": 960,
+        "y": 760
+      }
     ]
   },
   "rules_screen": {
@@ -78,7 +158,11 @@
       "line_spacing": 1.5
     },
     "menu": [
-      { "id": "back", "x": 960, "y": 980 }
+      {
+        "id": "back",
+        "x": 960,
+        "y": 980
+      }
     ]
   },
   "authors_screen": {
@@ -96,7 +180,11 @@
       "line_spacing": 1.5
     },
     "menu": [
-      { "id": "back", "x": 960, "y": 980 }
+      {
+        "id": "back",
+        "x": 960,
+        "y": 980
+      }
     ]
   }
 }
