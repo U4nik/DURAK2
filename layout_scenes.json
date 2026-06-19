@@ -108,12 +108,12 @@
     "subtitle": {
       "text": "Сортировка карт в руке",
       "x": 960,
-      "y": 200,
-      "size": 36
+      "y": 380,
+      "size": 48
     },
     "logo": {
       "file": "emotion/logo_start_game3.png",
-      "x": 1780,
+      "x": 1600,
       "y": 60,
       "scale": 0.25
     },
@@ -126,32 +126,38 @@
       {
         "id": "trump_pos",
         "x": 960,
-        "y": 380
+        "y": 460,
+        "indent": 40,
+        "sub_size": 36
       },
       {
         "id": "direction",
         "x": 960,
-        "y": 450
+        "y": 530,
+        "indent": 40,
+        "sub_size": 36
       },
       {
         "id": "sort_mode",
         "x": 960,
-        "y": 520
+        "y": 600,
+        "indent": 40,
+        "sub_size": 36
       },
       {
         "id": "sound",
         "x": 960,
-        "y": 600
+        "y": 680
       },
       {
         "id": "hint",
         "x": 960,
-        "y": 670
+        "y": 750
       },
       {
         "id": "reset_stats",
         "x": 960,
-        "y": 760
+        "y": 820
       }
     ]
   },

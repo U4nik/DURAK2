@@ -309,6 +309,24 @@ static const wchar_t* SC_RESUME_ITEMS[SC_RESUME_COUNT] = {
 // ховер для меню StartScreen
 static int g_scHoveredMenuItem = -1;
 
+// ------------------------------------------------------------
+// НАСТРОЙКИ — сцена Settings
+// ------------------------------------------------------------
+static const int SET_COUNT = 7;
+enum { SET_BACK = 0, SET_TRUMP, SET_DIR, SET_SORT, SET_SOUND, SET_HINT, SET_RESET };
+
+static struct {
+    sf::Vector2f titlePos;      int titleSize;
+    sf::Vector2f subtitlePos;   int subtitleSize;
+    std::string logoFile;       sf::Vector2f logoPos;    float logoScale;
+    std::vector<sf::Vector2f>  menuPos;
+    std::vector<int>           menuIndent;
+    std::vector<int>           menuSubSize;
+} g_setLayout;
+
+static int  g_setHoveredItem = -1;
+static bool g_setResetConfirm = false;  // подтверждение сброса статистики
+
 // состояние action-кнопки
 static std::string g_actionButtonState = "NONE";
 static float g_actionButtonAlpha = 255.f;     // для fade-анимации
@@ -354,6 +372,113 @@ static void load_settings()
             g_settings.card_sort_trump_position = val;
     }
     f.close();
+}
+
+static void save_settings()
+{
+    std::ofstream f("game.ini");
+    f << "card_hint_enabled=" << (g_settings.card_hint_enabled ? "1" : "0") << "\n";
+    f << "sound_effects=" << (g_settings.sound_effects ? "1" : "0") << "\n";
+    f << "card_sort_mode=" << g_settings.card_sort_mode << "\n";
+    f << "card_sort_direction=" << g_settings.card_sort_direction << "\n";
+    f << "card_sort_trump_position=" << g_settings.card_sort_trump_position << "\n";
+}
+
+static void reset_stats(); // forward decl — impl after save_stats()
+
+static void load_settings_screen_layout()
+{
+    g_setLayout.titlePos = {960.f, 100.f};   g_setLayout.titleSize = 64;
+    g_setLayout.subtitlePos = {960.f, 380.f}; g_setLayout.subtitleSize = 48;
+    g_setLayout.logoFile = "emotion/logo_start_game3.png";
+    g_setLayout.logoPos = {1780.f, 60.f};     g_setLayout.logoScale = 0.25f;
+    g_setLayout.menuPos = {
+        {960.f, 300.f}, {960.f, 460.f}, {960.f, 530.f}, {960.f, 600.f},
+        {960.f, 680.f}, {960.f, 750.f}, {960.f, 820.f}
+    };
+    g_setLayout.menuIndent = {0, 40, 40, 40, 0, 0, 0};
+    g_setLayout.menuSubSize = {0, 36, 36, 36, 0, 0, 0};
+
+    std::ifstream f("layout_scenes.json");
+    if (!f.is_open()) return;
+
+    std::string json((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+
+    auto getVal = [&](const std::string &key, size_t start) -> float
+    {
+        size_t p = json.find(key, start);
+        if (p == std::string::npos) return 0;
+        p = json.find(":", p);
+        size_t end = json.find_first_of(",}", p + 1);
+        return std::stof(json.substr(p + 1, end - (p + 1)));
+    };
+
+    size_t ss = json.find("\"settings_screen\"");
+    if (ss == std::string::npos) return;
+
+    // title
+    size_t t = json.find("\"title\"", ss);
+    if (t != std::string::npos)
+    {
+        g_setLayout.titlePos.x = getVal("\"x\"", t);
+        g_setLayout.titlePos.y = getVal("\"y\"", t);
+        g_setLayout.titleSize = (int)getVal("\"size\"", t);
+    }
+
+    // subtitle
+    size_t st = json.find("\"subtitle\"", ss);
+    if (st != std::string::npos)
+    {
+        g_setLayout.subtitlePos.x = getVal("\"x\"", st);
+        g_setLayout.subtitlePos.y = getVal("\"y\"", st);
+        g_setLayout.subtitleSize = (int)getVal("\"size\"", st);
+    }
+
+    // logo
+    size_t l = json.find("\"logo\"", ss);
+    if (l != std::string::npos)
+    {
+        g_setLayout.logoPos.x = getVal("\"x\"", l);
+        g_setLayout.logoPos.y = getVal("\"y\"", l);
+        g_setLayout.logoScale = getVal("\"scale\"", l);
+    }
+
+    // menu items
+    size_t m = json.find("\"menu\"", ss);
+    if (m != std::string::npos)
+    {
+        size_t arrStart = json.find("[", m);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != std::string::npos && arrEnd != std::string::npos)
+        {
+            std::string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            g_setLayout.menuPos.clear();
+            g_setLayout.menuIndent.clear();
+            g_setLayout.menuSubSize.clear();
+            size_t p = 0;
+            while (true)
+            {
+                size_t xKey = arr.find("\"x\"", p);
+                if (xKey == std::string::npos) break;
+                float xv = getVal("\"x\"", arrStart + p);
+                float yv = getVal("\"y\"", arrStart + p);
+                g_setLayout.menuPos.push_back({xv, yv});
+                // indent — опционально, по умолч. 0
+                size_t iKey = arr.find("\"indent\"", p);
+                if (iKey != std::string::npos && iKey < arr.find("}", p))
+                    g_setLayout.menuIndent.push_back((int)getVal("\"indent\"", arrStart + p));
+                else
+                    g_setLayout.menuIndent.push_back(0);
+                // sub_size — опционально, по умолч. 0
+                size_t sKey = arr.find("\"sub_size\"", p);
+                if (sKey != std::string::npos && sKey < arr.find("}", p))
+                    g_setLayout.menuSubSize.push_back((int)getVal("\"sub_size\"", arrStart + p));
+                else
+                    g_setLayout.menuSubSize.push_back(0);
+                p = arr.find("}", xKey) + 1;
+            }
+        }
+    }
 }
 
 // звуки — обёртка с проверкой настройки
@@ -507,6 +632,14 @@ static void save_stats()
     f.close();
 }
 
+static void reset_stats()
+{
+    g_statsPlrWins = 0;
+    g_statsBotWins = 0;
+    g_statsTotal = 0;
+    save_stats();
+}
+
 static void update_stats_text()
 {
     std::wstring leader;
@@ -595,7 +728,7 @@ void reset_all_visuals()
     g_deckCountText.setString(L"в колоде:24");
 
     g_deckSpr.setColor(sf::Color(255, 255, 255, 255));
-    g_trumpSpr.setColor(sf::Color(255, 255, 255, 255));
+    g_trumpSpr.setColor(sf::Color(255, 255, 255, 0));
 
     g_sprTrumpSuit.setColor(sf::Color(255, 255, 255, 0)); // скрыть спрайт масти
     g_showTrumpSuit = true;                               // разрешить показ в новой игре
@@ -894,6 +1027,7 @@ void ux_init(sf::RenderWindow *win)
     // START SCREEN INIT (после загрузки карт и звуков)
     // ---------------------------------------------------------
     load_start_screen_layout();
+    load_settings_screen_layout();
 
     // Заголовок
     g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
@@ -1916,10 +2050,64 @@ static void ux_handle_events()
                             g_scHoveredMenuItem = i;
                     }
                 }
+                }
             }
-        }
 
-        // закрытие окна (крестик)
+            // hover на сцене настроек
+            if (g_uxMode == UxMode::Settings)
+            {
+                g_setHoveredItem = -1;
+                // левый край подзаголовка для indent-а
+                g_scMenuText.setString(L"Сортировка карт в руке");
+                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
+                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
+
+                for (int i = 0; i < SET_COUNT; i++)
+                {
+                    sf::Vector2f pos = g_setLayout.menuPos[i];
+                    pos.x += g_setLayout.menuIndent[i];
+                    int sz = g_setLayout.menuSubSize[i];
+                    if (sz <= 0) sz = 48;
+                    // вычисляем bounds по аналогии с draw
+                    std::wstring text;
+                    if (i == SET_RESET && g_setResetConfirm)
+                        text = L"  для подтверждения сброса - кликни еще раз";
+                    else
+                    {
+                        static const wchar_t* SET_LABELS[SET_COUNT] = {
+                            L"Возврат в основное меню", L"Козыри: ", L"Направление сортировки: ",
+                            L"Режим сортировки: ", L"Звуковые эффекты: ", L"Подсказки хода: ",
+                            L"Сброс статистики"
+                        };
+                        text = SET_LABELS[i];
+                        if (i == SET_TRUMP)
+                        {
+                            int vi = 0;
+                            if (g_settings.card_sort_trump_position == "left") vi = 1;
+                            else if (g_settings.card_sort_trump_position == "right") vi = 2;
+                            static const wchar_t* V[3] = { L"Нет", L"Слева", L"Справа" };
+                            text += V[vi];
+                        }
+                        else if (i == SET_DIR)
+                            text += (g_settings.card_sort_direction == "desc") ? L"Убывание" : L"Возрастание";
+                        else if (i == SET_SORT)
+                            text += (g_settings.card_sort_mode == "suit") ? L"По масти" : L"По рангу";
+                        else if (i == SET_SOUND)
+                            text += g_settings.sound_effects ? L"да" : L"нет";
+                        else if (i == SET_HINT)
+                            text += g_settings.card_hint_enabled ? L"да" : L"нет";
+                    }
+                    g_scMenuText.setString(text);
+                    g_scMenuText.setCharacterSize(sz);
+                    auto b = g_scMenuText.getLocalBounds();
+                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                    g_scMenuText.setPosition(pos);
+                    if (g_scMenuText.getGlobalBounds().contains(mp))
+                        g_setHoveredItem = i;
+                }
+            }
+
+            // закрытие окна (крестик)
         if (e.type == sf::Event::Closed)
         {
             g_shouldExit = true;
@@ -1942,6 +2130,7 @@ static void ux_handle_events()
                 else
                 {
                     // Settings/Rules/Authors → назад в StartScreen
+                    g_setResetConfirm = false;
                     g_uxMode = UxMode::StartScreen;
                 }
             }
@@ -2124,8 +2313,109 @@ static void ux_handle_events()
             // клик на сцене настроек
             else if (g_uxMode == UxMode::Settings)
             {
-                // пока просто возврат на StartScreen
-                g_uxMode = UxMode::StartScreen;
+                // левый край подзаголовка для indent-а
+                g_scMenuText.setString(L"Сортировка карт в руке");
+                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
+                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
+
+                for (int i = 0; i < SET_COUNT; i++)
+                {
+                    sf::Vector2f pos = g_setLayout.menuPos[i];
+                    pos.x += g_setLayout.menuIndent[i];
+                    int sz = g_setLayout.menuSubSize[i];
+                    if (sz <= 0) sz = 48;
+                    std::wstring text;
+                    if (i == SET_RESET && g_setResetConfirm)
+                        text = L"  для подтверждения сброса - кликни еще раз";
+                    else
+                    {
+                        static const wchar_t* SET_LABELS[SET_COUNT] = {
+                            L"Возврат в основное меню", L"Козыри: ", L"Направление сортировки: ",
+                            L"Режим сортировки: ", L"Звуковые эффекты: ", L"Подсказки хода: ",
+                            L"Сброс статистики"
+                        };
+                        text = SET_LABELS[i];
+                        if (i == SET_TRUMP)
+                        {
+                            int vi = 0;
+                            if (g_settings.card_sort_trump_position == "left") vi = 1;
+                            else if (g_settings.card_sort_trump_position == "right") vi = 2;
+                            static const wchar_t* V[3] = { L"Нет", L"Слева", L"Справа" };
+                            text += V[vi];
+                        }
+                        else if (i == SET_DIR)
+                            text += (g_settings.card_sort_direction == "desc") ? L"Убывание" : L"Возрастание";
+                        else if (i == SET_SORT)
+                            text += (g_settings.card_sort_mode == "suit") ? L"По масти" : L"По рангу";
+                        else if (i == SET_SOUND)
+                            text += g_settings.sound_effects ? L"да" : L"нет";
+                        else if (i == SET_HINT)
+                            text += g_settings.card_hint_enabled ? L"да" : L"нет";
+                    }
+                    g_scMenuText.setString(text);
+                    g_scMenuText.setCharacterSize(sz);
+                    auto b = g_scMenuText.getLocalBounds();
+                    if (g_setLayout.menuIndent[i] > 0)
+                    {
+                        g_scMenuText.setOrigin(0, b.height / 2.f);
+                        g_scMenuText.setPosition(subLeft + g_setLayout.menuIndent[i], pos.y);
+                    }
+                    else
+                    {
+                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                        g_scMenuText.setPosition(pos);
+                    }
+                    if (!g_scMenuText.getGlobalBounds().contains(mp))
+                        continue;
+                    // клик попал в пункт i
+                    if (i == SET_BACK)
+                    {
+                        save_settings();
+                        g_setResetConfirm = false;
+                        g_uxMode = UxMode::StartScreen;
+                    }
+                    else if (i == SET_TRUMP)
+                    {
+                        if (g_settings.card_sort_trump_position == "none")
+                            g_settings.card_sort_trump_position = "left";
+                        else if (g_settings.card_sort_trump_position == "left")
+                            g_settings.card_sort_trump_position = "right";
+                        else
+                            g_settings.card_sort_trump_position = "none";
+                    }
+                    else if (i == SET_DIR)
+                    {
+                        g_settings.card_sort_direction =
+                            (g_settings.card_sort_direction == "asc") ? "desc" : "asc";
+                    }
+                    else if (i == SET_SORT)
+                    {
+                        g_settings.card_sort_mode =
+                            (g_settings.card_sort_mode == "rank") ? "suit" : "rank";
+                    }
+                    else if (i == SET_SOUND)
+                    {
+                        g_settings.sound_effects = !g_settings.sound_effects;
+                    }
+                    else if (i == SET_HINT)
+                    {
+                        g_settings.card_hint_enabled = !g_settings.card_hint_enabled;
+                    }
+                    else if (i == SET_RESET)
+                    {
+                        if (!g_setResetConfirm)
+                        {
+                            g_setResetConfirm = true;
+                        }
+                        else
+                        {
+                            reset_stats();
+                            update_stats_text();
+                            g_setResetConfirm = false;
+                        }
+                    }
+                    break;
+                }
             }
             // клик на сцене правил
             else if (g_uxMode == UxMode::Rules)
@@ -2570,6 +2860,8 @@ static void ux_draw_frame()
             }
 
             // позиция из layout
+            g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
+            g_scTitleText.setCharacterSize(g_scLayout.titleSize);
             g_scTitleText.setOrigin(0, 0);
             auto tb = g_scTitleText.getLocalBounds();
             g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
@@ -2640,18 +2932,119 @@ static void ux_draw_frame()
         }
         else if (g_uxMode == UxMode::Settings)
         {
-            // Заглушка для настроек
-            static sf::Text scSettingsText;
-            scSettingsText.setFont(g_font);
-            scSettingsText.setCharacterSize(48);
-            scSettingsText.setFillColor(sf::Color(255, 165, 0));
-            scSettingsText.setOutlineColor(sf::Color::Black);
-            scSettingsText.setOutlineThickness(2.5f);
-            scSettingsText.setString(L"НАСТРОЙКИ (кликните чтобы вернуться)");
-            auto sb = scSettingsText.getLocalBounds();
-            scSettingsText.setOrigin(sb.width / 2.f, sb.height / 2.f);
-            scSettingsText.setPosition(960.f, 540.f);
-            g_window->draw(scSettingsText);
+            // 1. Заголовок
+            g_scTitleText.setString(L"НАСТРОЙКИ");
+            g_scTitleText.setCharacterSize(g_setLayout.titleSize);
+            auto tb = g_scTitleText.getLocalBounds();
+            g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
+            g_scTitleText.setPosition(g_setLayout.titlePos);
+            g_window->draw(g_scTitleText);
+
+            // 2. Лого (с сохранением позиции/масштаба для StartScreen)
+            if (g_scLogoLoaded)
+            {
+                sf::Vector2f saveLogoPos = g_scLogoSprite.getPosition();
+                sf::Vector2f saveLogoScale = g_scLogoSprite.getScale();
+                g_scLogoSprite.setPosition(g_setLayout.logoPos);
+                g_scLogoSprite.setScale(g_setLayout.logoScale, g_setLayout.logoScale);
+                g_window->draw(g_scLogoSprite);
+                g_scLogoSprite.setPosition(saveLogoPos);
+                g_scLogoSprite.setScale(saveLogoScale.x, saveLogoScale.y);
+            }
+
+            // 3. Подзаголовок
+            g_scTitleText.setString(L"Сортировка карт в руке");
+            g_scTitleText.setCharacterSize(g_setLayout.subtitleSize);
+            tb = g_scTitleText.getLocalBounds();
+            g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
+            g_scTitleText.setPosition(g_setLayout.subtitlePos);
+            g_window->draw(g_scTitleText);
+
+                // 4. Пункты меню
+                // вычисляем левый край подзаголовка для indent-а
+                g_scMenuText.setString(L"Сортировка карт в руке");
+                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
+                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
+
+                static const wchar_t* SET_LABELS[SET_COUNT] = {
+                L"Возврат в основное меню",
+                L"Козыри: ",
+                L"Направление сортировки: ",
+                L"Режим сортировки: ",
+                L"Звуковые эффекты: ",
+                L"Подсказки хода: ",
+                L"Сброс статистики"
+            };
+            static const wchar_t* SET_VALUES_TRUMP[3] = { L"Нет", L"Слева", L"Справа" };
+            static const wchar_t* SET_VALUES_DIR[2]  = { L"Возрастание", L"Убывание" };
+            static const wchar_t* SET_VALUES_SORT[2] = { L"По рангу", L"По масти" };
+
+            for (int i = 0; i < SET_COUNT; i++)
+            {
+                std::wstring text = SET_LABELS[i];
+                if (i == SET_TRUMP)
+                {
+                    int vi = 0;
+                    if (g_settings.card_sort_trump_position == "left") vi = 1;
+                    else if (g_settings.card_sort_trump_position == "right") vi = 2;
+                    text += SET_VALUES_TRUMP[vi];
+                }
+                else if (i == SET_DIR)
+                {
+                    int vi = (g_settings.card_sort_direction == "desc") ? 1 : 0;
+                    text += SET_VALUES_DIR[vi];
+                }
+                else if (i == SET_SORT)
+                {
+                    int vi = (g_settings.card_sort_mode == "suit") ? 1 : 0;
+                    text += SET_VALUES_SORT[vi];
+                }
+                else if (i == SET_SOUND)
+                {
+                    text += g_settings.sound_effects ? L"да" : L"нет";
+                }
+                else if (i == SET_HINT)
+                {
+                    text += g_settings.card_hint_enabled ? L"да" : L"нет";
+                }
+                else if (i == SET_RESET)
+                {
+                    if (g_setResetConfirm)
+                        text = L"  для подтверждения сброса - кликни еще раз";
+                }
+
+                sf::Vector2f pos = g_setLayout.menuPos[i];
+                pos.x += g_setLayout.menuIndent[i];
+                int sz = g_setLayout.menuSubSize[i];
+                if (sz <= 0) sz = 48;
+
+                g_scMenuText.setString(text);
+                g_scMenuText.setCharacterSize(sz);
+
+                if (i == g_setHoveredItem)
+                {
+                    g_scMenuText.setOutlineThickness(4.f);
+                    g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                }
+                else
+                {
+                    g_scMenuText.setOutlineThickness(2.5f);
+                    g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+                }
+
+                auto b = g_scMenuText.getLocalBounds();
+                if (g_setLayout.menuIndent[i] > 0)
+                {
+                    g_scMenuText.setOrigin(0, b.height / 2.f);
+                    g_scMenuText.setPosition(subLeft + g_setLayout.menuIndent[i], pos.y);
+                }
+                else
+                {
+                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                    g_scMenuText.setPosition(pos);
+                }
+                g_window->draw(g_scMenuText);
+            }
         }
         else if (g_uxMode == UxMode::Rules)
         {
