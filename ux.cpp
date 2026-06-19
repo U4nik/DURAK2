@@ -289,12 +289,13 @@ static struct {
 } g_scLayout;
 
 // меню на StartScreen (canResume=false — главное меню)
-static const int SC_MAIN_COUNT = 4;
+static const int SC_MAIN_COUNT = 5;
 static const wchar_t* SC_MAIN_ITEMS[SC_MAIN_COUNT] = {
     L"Начать новую партию",
     L"Настройки",
     L"Правила игры",
-    L"Об авторах"
+    L"Об авторах",
+    L"Выход из игры"
 };
 
 // меню на in-game StartScreen (canResume=true)
@@ -303,6 +304,9 @@ static const wchar_t* SC_RESUME_ITEMS[SC_RESUME_COUNT] = {
     L"Вернуться к игре",
     L"Вернуться в основное меню"
 };
+
+// ховер для меню StartScreen
+static int g_scHoveredMenuItem = -1;
 
 // состояние action-кнопки
 static std::string g_actionButtonState = "NONE";
@@ -1847,6 +1851,46 @@ static void ux_handle_events()
             update_hover_effects(g_vis_plr, g_pending.moves, mp);
         }
 
+        // hover на стартовом меню
+        if (e.type == sf::Event::MouseMoved)
+        {
+            g_scHoveredMenuItem = -1;
+            if (g_uxMode == UxMode::StartScreen)
+            {
+                if (g_scCanResume)
+                {
+                    int indices[] = {0, 4};
+                    for (int i = 0; i < SC_RESUME_COUNT; i++)
+                    {
+                        int idx = indices[i];
+                        if (idx >= (int)g_scLayout.menuPos.size()) idx = (int)g_scLayout.menuPos.size() - 1;
+                        g_scMenuText.setString(SC_RESUME_ITEMS[i]);
+                        auto b = g_scMenuText.getLocalBounds();
+                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                        if (g_scMenuText.getGlobalBounds().contains(mp))
+                            g_scHoveredMenuItem = i;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < SC_MAIN_COUNT; i++)
+                    {
+                        int idx = i + 1;
+                        if (idx >= (int)g_scLayout.menuPos.size()) idx = (int)g_scLayout.menuPos.size() - 1;
+                        sf::Vector2f pos = g_scLayout.menuPos[idx];
+                        if (i == 4) pos.y += 80.f;
+                        g_scMenuText.setString(SC_MAIN_ITEMS[i]);
+                        auto b = g_scMenuText.getLocalBounds();
+                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                        g_scMenuText.setPosition(pos);
+                        if (g_scMenuText.getGlobalBounds().contains(mp))
+                            g_scHoveredMenuItem = i;
+                    }
+                }
+            }
+        }
+
         // закрытие окна (крестик)
         if (e.type == sf::Event::Closed)
         {
@@ -2008,16 +2052,18 @@ static void ux_handle_events()
                 }
                 else
                 {
-                    // главное меню: NewGame(1), Settings(2), Rules(3), Authors(4)
+                    // главное меню: NewGame(1), Settings(2), Rules(3), Authors(4), Exit(+80)
                     for (int i = 0; i < SC_MAIN_COUNT; i++)
                     {
                         int idx = i + 1;
                         if (idx >= (int)g_scLayout.menuPos.size())
                             idx = (int)g_scLayout.menuPos.size() - 1;
+                        sf::Vector2f pos = g_scLayout.menuPos[idx];
+                        if (i == 4) pos.y += 80.f;
                         g_scMenuText.setString(SC_MAIN_ITEMS[i]);
                         auto b = g_scMenuText.getLocalBounds();
                         g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                        g_scMenuText.setPosition(pos);
 
                         if (g_scMenuText.getGlobalBounds().contains(mp))
                         {
@@ -2036,6 +2082,10 @@ static void ux_handle_events()
                             else if (i == 3) // Об авторах
                             {
                                 g_uxMode = UxMode::Authors;
+                            }
+                            else if (i == 4) // Выход из игры
+                            {
+                                g_startScreenResult = ScResult::Exit;
                             }
                             break;
                         }
@@ -2504,7 +2554,6 @@ static void ux_draw_frame()
             // 4. Меню из layout
             if (g_scCanResume)
             {
-                // in-game: Resume (0), Back (4)
                 int indices[] = {0, 4};
                 for (int i = 0; i < SC_RESUME_COUNT; i++)
                 {
@@ -2515,21 +2564,42 @@ static void ux_draw_frame()
                     auto b = g_scMenuText.getLocalBounds();
                     g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
                     g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                    if (i == g_scHoveredMenuItem)
+                    {
+                        g_scMenuText.setOutlineThickness(4.f);
+                        g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                    }
+                    else
+                    {
+                        g_scMenuText.setOutlineThickness(2.5f);
+                        g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+                    }
                     g_window->draw(g_scMenuText);
                 }
             }
             else
             {
-                // главное меню: NewGame(1), Settings(2), Rules(3), Authors(4)
                 for (int i = 0; i < SC_MAIN_COUNT; i++)
                 {
                     int idx = i + 1;
                     if (idx >= (int)g_scLayout.menuPos.size())
                         idx = (int)g_scLayout.menuPos.size() - 1;
+                    sf::Vector2f pos = g_scLayout.menuPos[idx];
+                    if (i == 4) pos.y += 80.f; // Exit под последним пунктом
                     g_scMenuText.setString(SC_MAIN_ITEMS[i]);
                     auto b = g_scMenuText.getLocalBounds();
                     g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                    g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                    g_scMenuText.setPosition(pos);
+                    if (i == g_scHoveredMenuItem)
+                    {
+                        g_scMenuText.setOutlineThickness(4.f);
+                        g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                    }
+                    else
+                    {
+                        g_scMenuText.setOutlineThickness(2.5f);
+                        g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+                    }
                     g_window->draw(g_scMenuText);
                 }
             }
