@@ -53,6 +53,18 @@
         "y": 700
       }
     ],
+    "in_game_menu": [
+      {
+        "id": "resume_game",
+        "x": 960,
+        "y": 380
+      },
+      {
+        "id": "back_to_menu",
+        "x": 960,
+        "y": 460
+      }
+    ],
     "cards": [
       {
         "x": 150,

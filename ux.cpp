@@ -285,6 +285,7 @@ static struct {
     float logoScale;
     std::string logoFile;
     std::vector<sf::Vector2f> menuPos;
+    std::vector<sf::Vector2f> inGameMenuPos;
     std::vector<sf::Vector2f> cardsPos;
 } g_scLayout;
 
@@ -1145,6 +1146,7 @@ static void load_start_screen_layout()
         {150.f, 280.f}, {220.f, 280.f}, {150.f, 460.f},
         {220.f, 460.f}, {150.f, 640.f}, {220.f, 640.f}
     };
+    g_scLayout.inGameMenuPos = {{960.f, 380.f}, {960.f, 460.f}};
 
     ifstream f("layout_scenes.json");
     if (!f.is_open())
@@ -1205,6 +1207,29 @@ static void load_start_screen_layout()
                 float xv = getVal("\"x\"", arrStart + p);
                 float yv = getVal("\"y\"", arrStart + p);
                 g_scLayout.menuPos.push_back({xv, yv});
+                p = arr.find("}", xKey) + 1;
+            }
+        }
+    }
+
+    // in_game_menu items
+    size_t igm = json.find("\"in_game_menu\"", ss);
+    if (igm != string::npos)
+    {
+        size_t arrStart = json.find("[", igm);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != string::npos && arrEnd != string::npos)
+        {
+            string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            g_scLayout.inGameMenuPos.clear();
+            size_t p = 0;
+            while (true)
+            {
+                size_t xKey = arr.find("\"x\"", p);
+                if (xKey == string::npos) break;
+                float xv = getVal("\"x\"", arrStart + p);
+                float yv = getVal("\"y\"", arrStart + p);
+                g_scLayout.inGameMenuPos.push_back({xv, yv});
                 p = arr.find("}", xKey) + 1;
             }
         }
@@ -1859,15 +1884,18 @@ static void ux_handle_events()
             {
                 if (g_scCanResume)
                 {
-                    int indices[] = {0, 4};
+                    // in-game: позиции из inGameMenuPos
                     for (int i = 0; i < SC_RESUME_COUNT; i++)
                     {
-                        int idx = indices[i];
-                        if (idx >= (int)g_scLayout.menuPos.size()) idx = (int)g_scLayout.menuPos.size() - 1;
+                        sf::Vector2f pos;
+                        if (i < (int)g_scLayout.inGameMenuPos.size())
+                            pos = g_scLayout.inGameMenuPos[i];
+                        else
+                            pos = g_scLayout.menuPos[0];
                         g_scMenuText.setString(SC_RESUME_ITEMS[i]);
                         auto b = g_scMenuText.getLocalBounds();
                         g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                        g_scMenuText.setPosition(pos);
                         if (g_scMenuText.getGlobalBounds().contains(mp))
                             g_scHoveredMenuItem = i;
                     }
@@ -2023,17 +2051,18 @@ static void ux_handle_events()
             {
                 if (g_scCanResume)
                 {
-                    // in-game: Resume(0), Back(4)
-                    int indices[] = {0, 4};
+                    // in-game: позиции из inGameMenuPos
                     for (int i = 0; i < SC_RESUME_COUNT; i++)
                     {
-                        int idx = indices[i];
-                        if (idx >= (int)g_scLayout.menuPos.size())
-                            idx = (int)g_scLayout.menuPos.size() - 1;
+                        sf::Vector2f pos;
+                        if (i < (int)g_scLayout.inGameMenuPos.size())
+                            pos = g_scLayout.inGameMenuPos[i];
+                        else
+                            pos = g_scLayout.menuPos[0];
                         g_scMenuText.setString(SC_RESUME_ITEMS[i]);
                         auto b = g_scMenuText.getLocalBounds();
                         g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                        g_scMenuText.setPosition(pos);
 
                         if (g_scMenuText.getGlobalBounds().contains(mp))
                         {
@@ -2554,16 +2583,18 @@ static void ux_draw_frame()
             // 4. Меню из layout
             if (g_scCanResume)
             {
-                int indices[] = {0, 4};
+                // in-game: позиции из inGameMenuPos
                 for (int i = 0; i < SC_RESUME_COUNT; i++)
                 {
-                    int idx = indices[i];
-                    if (idx >= (int)g_scLayout.menuPos.size())
-                        idx = (int)g_scLayout.menuPos.size() - 1;
+                    sf::Vector2f pos;
+                    if (i < (int)g_scLayout.inGameMenuPos.size())
+                        pos = g_scLayout.inGameMenuPos[i];
+                    else
+                        pos = g_scLayout.menuPos[0];
                     g_scMenuText.setString(SC_RESUME_ITEMS[i]);
                     auto b = g_scMenuText.getLocalBounds();
                     g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                    g_scMenuText.setPosition(g_scLayout.menuPos[idx]);
+                    g_scMenuText.setPosition(pos);
                     if (i == g_scHoveredMenuItem)
                     {
                         g_scMenuText.setOutlineThickness(4.f);
