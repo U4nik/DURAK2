@@ -2630,6 +2630,10 @@ int get_player_move_index(const State &st, const std::vector<Move> &moves)
         if (g_shouldExit)
             return -1;
 
+        // если переключились в меню — выходим
+        if (ux_is_menu_active())
+            return -1;
+
         ux_process_frame();
     }
 
@@ -2727,162 +2731,219 @@ int main()
 
     ux_init(&window); // <- функция из UX 2.0 (B2: окно создаёт движок)
 
-    State empty;
-    State st = init_first_game_state();
-
-    // вместо текстового "[UX] ..." — сразу в UX
-    print_ux_diff(empty, st);
-    ux_wait_all(); // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-    cout << "Init OK\n";
-
+    // =========================================
+    // OUTER LOOP — StartScreen → game → restart
+    // =========================================
     while (window.isOpen())
     {
-        // проверка ESC
-        if (g_shouldExit)
+        // --- StartScreen (БЛОКИРУЕТ, игра НЕ запущена) ---
+        ScResult sa = ux_wait_start_screen(false);
+        if (sa == ScResult::Exit || g_shouldExit)
             break;
 
-        print_state(st);
+        // Полный сброс визуалов (руки, стол, слоты, лэйаут)
+        ux_reset_visuals();
 
-        Phase ph = what_ph(st);
-        cout << "Phase: " << phase_to_str(ph) << "\n";
+        // --- Инициализация игры ТОЛЬКО после клика "Начать новую партию" ---
+        State empty;
+        State st = init_first_game_state();
 
-        if (ph == PH_GAMEOVER_PLR_WIN ||
-            ph == PH_GAMEOVER_BOT_WIN ||
-            ph == PH_GAMEOVER_DRAW)
+        // вместо текстового "[UX] ..." — сразу в UX
+        print_ux_diff(empty, st);
+        ux_wait_all();
+
+        cout << "Init OK\n";
+
+        // --- INNER LOOP — игра ---
+        bool restartGame = false;
+        while (window.isOpen() && !restartGame)
         {
-            cout << "GAME OVER: " << phase_to_str(ph) << "\n";
-            // break; ------------------------
-            ux_wait_gameover_continue();
+            // проверка ESC
+            if (g_shouldExit)
+                break;
 
-            Side attacker;
-            if (ph == PH_GAMEOVER_PLR_WIN)
-                attacker = PLR;
-            else if (ph == PH_GAMEOVER_BOT_WIN)
-                attacker = BOT;
-            else
-                attacker = (rng() % 2 == 0 ? PLR : BOT);
-
-            State empty = {};
-
-            st = init_next_game_state(attacker);
-
-            print_ux_diff(empty, st);
-            ux_wait_all();
-
-            continue;
-            //----------------------------
-        }
-
-        if (ph == PH_END_OF_WAVE)
-        {
-            cout << "[AUTO] End of wave\n";
-            State old = st;
-            st = apply_move(st, Move::Pass());
-            print_ux_diff(old, st);
-            ux_wait_all(); // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-            continue;
-        }
-
-        auto res = validator(st);
-        if (res.error)
-        {
-            cout << "Validator error or invalid phase. Exiting.\n";
-            break;
-        }
-
-        auto moves = res.moves;
-
-        if (ph == PH_EXTRA_ATTACK &&
-            st.actor == st.defender &&
-            moves.size() == 1 &&
-            moves[0].is_pass)
-        {
-            cout << "[AUTO] Defender forced to take\n";
-            State old = st;
-            st = apply_move(st, moves[0]);
-            print_ux_diff(old, st);
-            ux_wait_all(); // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-            continue;
-        }
-
-        if (ph == PH_EXTRA_ATTACK &&
-            st.actor == st.attacker &&
-            moves.size() == 1 &&
-            moves[0].is_pass)
-        {
-            cout << "[AUTO] Attacker cannot add\n";
-            State old = st;
-            st = apply_move(st, moves[0]);
-            print_ux_diff(old, st);
-            ux_wait_all(); // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-            continue;
-        }
-
-        if (st.actor == BOT)
-        {
-            // Сначала завершаем все предыдущие анимации (отбой и др.)
-            ux_wait_all();
-
-            Move m = bot_choose(st);
-            cout << "[BOT] chooses: ";
-            if (m.is_pass)
-                cout << "PASS\n";
-            else
-            {
-                print_card(m.card);
-                cout << "\n";
-            }
-            State old = st;
-            st = apply_move(st, m);
-            print_ux_diff(old, st);
-            ux_wait_all(); // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-            continue;
-        }
-
-        int idx = get_player_move_index(st, moves);
-        if (idx < 0)
-            break;
-
-        Move chosen = moves[idx];
-        State old = st;
-        st = apply_move(st, chosen);
-        print_ux_diff(old, st);
-        ux_process_frame(); // ← немедленно выполнить команды раздачи
-        ux_wait_all();      // ← ДОИГРЫВАЕМ ВСЕ АНИМАЦИИ
-
-        Phase next_ph = what_ph(st);
-        if (next_ph == PH_GAMEOVER_PLR_WIN ||
-            next_ph == PH_GAMEOVER_BOT_WIN ||
-            next_ph == PH_GAMEOVER_DRAW)
-        {
             print_state(st);
-            cout << "GAME OVER: " << phase_to_str(next_ph) << "\n";
-            // break;  //--------------------
-            ux_wait_gameover_continue();
 
-            Side attacker;
-            if (next_ph == PH_GAMEOVER_PLR_WIN)
-                attacker = PLR;
-            else if (ph == PH_GAMEOVER_BOT_WIN)
-                attacker = BOT;
-            else
-                attacker = (rng() % 2 == 0 ? PLR : BOT);
+            Phase ph = what_ph(st);
+            cout << "Phase: " << phase_to_str(ph) << "\n";
 
-            State empty = {};
+            if (ph == PH_GAMEOVER_PLR_WIN ||
+                ph == PH_GAMEOVER_BOT_WIN ||
+                ph == PH_GAMEOVER_DRAW)
+            {
+                cout << "GAME OVER: " << phase_to_str(ph) << "\n";
 
-            st = init_next_game_state(attacker);
+                ux_wait_gameover_continue();
 
-            print_ux_diff(empty, st);
+                // если ESC → StartScreen
+                if (ux_is_menu_active())
+                {
+                    sa = ux_wait_start_screen(true);
+                    if (sa == ScResult::Resume)
+                        continue; // назад в GameOver
+                    if (sa == ScResult::Back || sa == ScResult::Exit)
+                    {
+                        restartGame = true;
+                        break;
+                    }
+                }
+
+                Side attacker;
+                if (ph == PH_GAMEOVER_PLR_WIN)
+                    attacker = PLR;
+                else if (ph == PH_GAMEOVER_BOT_WIN)
+                    attacker = BOT;
+                else
+                    attacker = (rng() % 2 == 0 ? PLR : BOT);
+
+                State empty = {};
+
+                st = init_next_game_state(attacker);
+
+                print_ux_diff(empty, st);
+                ux_wait_all();
+
+                continue;
+            }
+
+            if (ph == PH_END_OF_WAVE)
+            {
+                cout << "[AUTO] End of wave\n";
+                State old = st;
+                st = apply_move(st, Move::Pass());
+                print_ux_diff(old, st);
+                ux_wait_all();
+
+                continue;
+            }
+
+            auto res = validator(st);
+            if (res.error)
+            {
+                cout << "Validator error or invalid phase. Exiting.\n";
+                break;
+            }
+
+            auto moves = res.moves;
+
+            if (ph == PH_EXTRA_ATTACK &&
+                st.actor == st.defender &&
+                moves.size() == 1 &&
+                moves[0].is_pass)
+            {
+                cout << "[AUTO] Defender forced to take\n";
+                State old = st;
+                st = apply_move(st, moves[0]);
+                print_ux_diff(old, st);
+                ux_wait_all();
+
+                continue;
+            }
+
+            if (ph == PH_EXTRA_ATTACK &&
+                st.actor == st.attacker &&
+                moves.size() == 1 &&
+                moves[0].is_pass)
+            {
+                cout << "[AUTO] Attacker cannot add\n";
+                State old = st;
+                st = apply_move(st, moves[0]);
+                print_ux_diff(old, st);
+                ux_wait_all();
+
+                continue;
+            }
+
+            if (st.actor == BOT)
+            {
+                ux_wait_all();
+
+                Move m = bot_choose(st);
+                cout << "[BOT] chooses: ";
+                if (m.is_pass)
+                    cout << "PASS\n";
+                else
+                {
+                    print_card(m.card);
+                    cout << "\n";
+                }
+                State old = st;
+                st = apply_move(st, m);
+                print_ux_diff(old, st);
+                ux_wait_all();
+
+                continue;
+            }
+
+            int idx = get_player_move_index(st, moves);
+            if (idx < 0)
+            {
+                // ESC был нажат — проверяем, перешли ли в меню
+                if (ux_is_menu_active())
+                {
+                    sa = ux_wait_start_screen(true);
+                    if (sa == ScResult::Resume)
+                        continue; // вернулись в игру
+                    if (sa == ScResult::Back || sa == ScResult::Exit)
+                    {
+                        restartGame = true;
+                        break;
+                    }
+                }
+                break;
+            }
+
+            Move chosen = moves[idx];
+            State old = st;
+            st = apply_move(st, chosen);
+            print_ux_diff(old, st);
+            ux_process_frame();
             ux_wait_all();
 
-            continue;
-            //--------------------------------
+            Phase next_ph = what_ph(st);
+            if (next_ph == PH_GAMEOVER_PLR_WIN ||
+                next_ph == PH_GAMEOVER_BOT_WIN ||
+                next_ph == PH_GAMEOVER_DRAW)
+            {
+                print_state(st);
+                cout << "GAME OVER: " << phase_to_str(next_ph) << "\n";
+
+                ux_wait_gameover_continue();
+
+                // если ESC → StartScreen
+                if (ux_is_menu_active())
+                {
+                    sa = ux_wait_start_screen(true);
+                    if (sa == ScResult::Resume)
+                        continue;
+                    if (sa == ScResult::Back || sa == ScResult::Exit)
+                    {
+                        restartGame = true;
+                        break;
+                    }
+                }
+
+                Side attacker;
+                if (next_ph == PH_GAMEOVER_PLR_WIN)
+                    attacker = PLR;
+                else if (ph == PH_GAMEOVER_BOT_WIN)
+                    attacker = BOT;
+                else
+                    attacker = (rng() % 2 == 0 ? PLR : BOT);
+
+                State empty = {};
+
+                st = init_next_game_state(attacker);
+
+                print_ux_diff(empty, st);
+                ux_wait_all();
+
+                continue;
+            }
         }
+
+        if (g_shouldExit || sa == ScResult::Exit)
+            break;
     }
 
     ux_shutdown();

@@ -9,6 +9,8 @@ struct UxCommand
     std::vector<std::string> args;
 };
 
+enum class ScResult { None, Resume, NewGame, Back, Exit };
+
 void ux_init(sf::RenderWindow *win);
 void ux_shutdown();
 void ux_process_frame();
@@ -24,5 +26,6 @@ void ux_cmd(const std::string &name,
             const std::vector<std::string> &args = {});
 void ux_wait_gameover_continue();
 
-
-
+ScResult ux_wait_start_screen(bool canResume);
+bool ux_is_menu_active();
+void ux_reset_visuals();

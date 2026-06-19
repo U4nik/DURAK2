@@ -114,7 +114,10 @@ enum class UxMode
     Idle,
     WaitPlayerMove,
     GameOver,
-    ConfirmExit
+    StartScreen,
+    Settings,
+    Rules,
+    Authors
 
 };
 
@@ -257,6 +260,34 @@ static bool g_exitButtonVisible = false;       // видима ли кнопка
 
 // флаг показа масти козыря
 static bool g_showTrumpSuit = true; // ← легко отключить эффект
+
+// ------------------------------------------------------------
+// START SCREEN GLOBALS
+// ------------------------------------------------------------
+static ScResult g_startScreenResult = ScResult::None;
+static bool g_scCanResume = false;
+static UxMode g_scPrevUxMode = UxMode::Idle; // режим до StartScreen
+static sf::Text g_scTitleText;
+static sf::Text g_scMenuText;
+static sf::Texture g_scLogoTexture;
+static sf::Sprite g_scLogoSprite;
+static bool g_scLogoLoaded = false;
+
+// меню на StartScreen (canResume=false — главное меню)
+static const int SC_MAIN_COUNT = 4;
+static const wchar_t* SC_MAIN_ITEMS[SC_MAIN_COUNT] = {
+    L"Начать новую партию",
+    L"Настройки",
+    L"Правила игры",
+    L"Об авторах"
+};
+
+// меню на in-game StartScreen (canResume=true)
+static const int SC_RESUME_COUNT = 2;
+static const wchar_t* SC_RESUME_ITEMS[SC_RESUME_COUNT] = {
+    L"Вернуться к игре",
+    L"Вернуться в основное меню"
+};
 
 // состояние action-кнопки
 static std::string g_actionButtonState = "NONE";
@@ -553,20 +584,9 @@ void reset_all_visuals()
     g_gameOverActive = false;
     g_gameOverWithFireworks = false;
 
-    // сброс сцены подтверждения выхода
-    g_exitConfirmActive = false;
-    g_exitConfirmAlpha = 255.f;
-    g_exitConfirmFading = false;
-    g_exitConfirmed = false;
-    g_exitConfirmDelayTimer = 0.f;
-    g_exitBgAlpha = 255.f;
-    g_exitPrevUxMode = UxMode::Idle;
-    g_exitButtonAlpha = 255.f;
-    g_exitButtonFading = false;
-    g_exitButtonVisible = false;
-    g_sprExitContinue.setColor(sf::Color(255, 255, 255, 0));
-    g_exitConfirmTextQuestion.setString(L"Покинуть игру?");
-    g_exitConfirmTextInstruction.setString(L"Выход - нажмите клавишу ESC");
+    // сброс стартового меню
+    g_startScreenResult = ScResult::None;
+    g_scCanResume = false;
 
     g_pendingSortPlr = false;
     g_pendingSortBot = false;
@@ -675,6 +695,33 @@ void ux_init(sf::RenderWindow *win)
     g_hintText.setOutlineThickness(2.5f);
     g_hintText.setString(L"");
     g_hintText.setPosition(1920.f / 2.f, 1080.f / 2.f);
+
+    // StartScreen — заголовок
+    g_scTitleText.setFont(g_font);
+    g_scTitleText.setCharacterSize(80);
+    g_scTitleText.setFillColor(sf::Color(255, 165, 0));
+    g_scTitleText.setOutlineColor(sf::Color::Black);
+    g_scTitleText.setOutlineThickness(3.f);
+    g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
+    auto stb = g_scTitleText.getLocalBounds();
+    g_scTitleText.setOrigin(stb.width / 2.f, stb.height / 2.f);
+    g_scTitleText.setPosition(960.f, 120.f);
+
+    // StartScreen — текст меню (настраивается перед отрисовкой)
+    g_scMenuText.setFont(g_font);
+    g_scMenuText.setCharacterSize(48);
+    g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+    g_scMenuText.setOutlineColor(sf::Color::Black);
+    g_scMenuText.setOutlineThickness(2.5f);
+
+    // StartScreen — лого
+    g_scLogoLoaded = g_scLogoTexture.loadFromFile("emotion/logo_start_game3.png");
+    if (g_scLogoLoaded)
+    {
+        g_scLogoSprite.setTexture(g_scLogoTexture);
+        g_scLogoSprite.setScale(0.3f, 0.3f);
+        g_scLogoSprite.setPosition(1720.f, 780.f);
+    }
 
     // ---------------------------
     // LOAD CARD TEXTURES
@@ -1650,87 +1697,38 @@ static void ux_handle_events()
         // закрытие окна (крестик)
         if (e.type == sf::Event::Closed)
         {
-            // показываем сцену подтверждения выхода (как ESC)
-            if (g_uxMode != UxMode::ConfirmExit)
-            {
-                g_exitPrevUxMode = g_uxMode; // ← сохраняем текущий режим
-                g_uxMode = UxMode::ConfirmExit;
-                g_exitConfirmActive = true;
-                g_exitConfirmAlpha = 255.f;
-                g_exitBgAlpha = 255.f;
-                g_exitConfirmFading = false;
-                g_exitConfirmed = false;
-                g_exitConfirmDelayTimer = 0.f;
-                g_exitButtonAlpha = 255.f;
-                g_exitButtonFading = false;
-                g_exitButtonVisible = true;
-
-                // показываем кнопку "Продолжить" (ОТДЕЛЬНУЮ)
-                g_sprExitContinue.setColor(sf::Color(255, 255, 255, 255));
-            }
-            else
-            {
-                // повторное нажатие на крестик — закрываемся
-                FreeConsole();
-                g_window->close();
-            }
+            g_shouldExit = true;
         }
 
         // обработка ESC
         if (e.type == sf::Event::KeyPressed &&
             e.key.code == sf::Keyboard::Escape)
         {
-            if (g_uxMode == UxMode::ConfirmExit)
+            if (g_uxMode == UxMode::StartScreen ||
+                g_uxMode == UxMode::Settings ||
+                g_uxMode == UxMode::Rules ||
+                g_uxMode == UxMode::Authors)
             {
-                // повторное нажатие ESC — подтверждаем выход
-                g_exitConfirmed = true;
-                g_exitConfirmDelayTimer = 1.0f; // 1 секунда задержки
+                // ESC на StartScreen → выход
+                if (g_uxMode == UxMode::StartScreen)
+                {
+                    g_shouldExit = true;
+                }
+                else
+                {
+                    // Settings/Rules/Authors → назад в StartScreen
+                    g_uxMode = UxMode::StartScreen;
+                }
             }
             else if (g_uxMode == UxMode::GameOver)
             {
-                // на Game Over сцене ESC тоже показывает подтверждение
-                g_exitPrevUxMode = UxMode::GameOver; // ← сохраняем
-                g_uxMode = UxMode::ConfirmExit;
-                g_exitConfirmActive = true;
-                g_exitConfirmAlpha = 255.f;
-                g_exitBgAlpha = 255.f; // ← сброс альфа фона
-                g_exitConfirmFading = false;
-                g_exitConfirmed = false;
-                g_exitConfirmDelayTimer = 0.f;
-                g_exitButtonAlpha = 255.f;
-                g_exitButtonFading = false;
-                g_exitButtonVisible = true;
-
-                // восстанавливаем текст
-                g_exitConfirmTextQuestion.setString(L"Покинуть игру?");
-                auto bq = g_exitConfirmTextQuestion.getLocalBounds();
-                g_exitConfirmTextQuestion.setOrigin(bq.width / 2.f, bq.height / 2.f);
-                g_exitConfirmTextQuestion.setPosition(1920.f / 2.f, 1080.f / 2.f - 150.f);
-                g_exitConfirmTextInstruction.setString(L"Выход из игры- нажмите клавишу ESC ");
-                auto bi = g_exitConfirmTextInstruction.getLocalBounds();
-                g_exitConfirmTextInstruction.setOrigin(bi.width / 2.f, bi.height / 2.f);
-                g_exitConfirmTextInstruction.setPosition(1920.f / 2.f, 1080.f / 2.f - 80.f);
-
-                // показываем кнопку "Продолжить" (ОТДЕЛЬНУЮ)
-                g_sprExitContinue.setColor(sf::Color(255, 255, 255, 255));
+                // ESC на GameOver — игнорируем (игрок жмёт Continue)
             }
             else
             {
-                // первое нажатие ESC — показываем подтверждение
-                g_exitPrevUxMode = g_uxMode; // ← сохраняем текущий режим
-                g_uxMode = UxMode::ConfirmExit;
-                g_exitConfirmActive = true;
-                g_exitConfirmAlpha = 255.f;
-                g_exitBgAlpha = 255.f; // ← сброс альфа фона
-                g_exitConfirmFading = false;
-                g_exitConfirmed = false;
-                g_exitConfirmDelayTimer = 0.f;
-                g_exitButtonAlpha = 255.f;
-                g_exitButtonFading = false;
-                g_exitButtonVisible = true;
-
-                // показываем кнопку "Продолжить" (ОТДЕЛЬНУЮ)
-                g_sprExitContinue.setColor(sf::Color(255, 255, 255, 255));
+                // ESC на Idle/WaitPlayerMove → StartScreen (сохраняем режим)
+                g_scPrevUxMode = g_uxMode;
+                g_uxMode = UxMode::StartScreen;
             }
         }
 
@@ -1823,41 +1821,83 @@ static void ux_handle_events()
                     }
                 }
             }
-            // клик на сцене подтверждения выхода
-            else if (g_uxMode == UxMode::ConfirmExit)
+            // клик на стартовой сцене
+            else if (g_uxMode == UxMode::StartScreen)
             {
-                if (g_exitButtonVisible &&
-                    g_sprExitContinue.getGlobalBounds().contains(mp))
+                float menuY = 380.f;
+                if (g_scCanResume)
                 {
-                    // кнопка "Продолжить" — возвращаемся к игре
-                    std::cout << "[UX] CONTINUE clicked - stay in game\n";
+                    for (int i = 0; i < SC_RESUME_COUNT; i++)
+                    {
+                        g_scMenuText.setString(SC_RESUME_ITEMS[i]);
+                        auto b = g_scMenuText.getLocalBounds();
+                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                        g_scMenuText.setPosition(960.f, menuY);
 
-                    // скрываем сцену подтверждения
-                    g_exitConfirmActive = false;
-                    g_exitConfirmAlpha = 255.f;
-                    g_exitBgAlpha = 255.f; // ← сброс альфа фона
-                    g_exitConfirmFading = false;
-                    g_exitConfirmed = false;
-                    g_exitConfirmDelayTimer = 0.f;
-                    g_exitButtonVisible = false;
-                    g_exitButtonFading = true;
-
-                    // восстанавливаем тексты
-                    g_exitConfirmTextQuestion.setString(L"Покинуть игру?");
-                    auto bq = g_exitConfirmTextQuestion.getLocalBounds();
-                    g_exitConfirmTextQuestion.setOrigin(bq.width / 2.f, bq.height / 2.f);
-                    g_exitConfirmTextQuestion.setPosition(1920.f / 2.f, 1080.f / 2.f - 150.f);
-                    g_exitConfirmTextInstruction.setString(L"Выход - нажмите клавишу ESC");
-                    auto bi = g_exitConfirmTextInstruction.getLocalBounds();
-                    g_exitConfirmTextInstruction.setOrigin(bi.width / 2.f, bi.height / 2.f);
-                    g_exitConfirmTextInstruction.setPosition(1920.f / 2.f, 1080.f / 2.f - 80.f);
-
-                    // скрываем кнопку выхода (НЕ трогаем g_sprAction!)
-                    g_sprExitContinue.setColor(sf::Color(255, 255, 255, 0));
-
-                    // возвращаемся к предыдущему режиму
-                    g_uxMode = g_exitPrevUxMode; // ← восстанавливаем режим
+                        if (g_scMenuText.getGlobalBounds().contains(mp))
+                        {
+                            if (i == 0) // Вернуться к игре
+                            {
+                                g_uxMode = g_scPrevUxMode;
+                                g_startScreenResult = ScResult::Resume;
+                            }
+                            else if (i == 1) // Вернуться в основное меню
+                            {
+                                g_startScreenResult = ScResult::Back;
+                            }
+                            break;
+                        }
+                        menuY += 80.f;
+                    }
                 }
+                else
+                {
+                    for (int i = 0; i < SC_MAIN_COUNT; i++)
+                    {
+                        g_scMenuText.setString(SC_MAIN_ITEMS[i]);
+                        auto b = g_scMenuText.getLocalBounds();
+                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                        g_scMenuText.setPosition(960.f, menuY);
+
+                        if (g_scMenuText.getGlobalBounds().contains(mp))
+                        {
+                            if (i == 0) // Начать новую партию
+                            {
+                                g_startScreenResult = ScResult::NewGame;
+                            }
+                            else if (i == 1) // Настройки
+                            {
+                                g_uxMode = UxMode::Settings;
+                            }
+                            else if (i == 2) // Правила игры
+                            {
+                                g_uxMode = UxMode::Rules;
+                            }
+                            else if (i == 3) // Об авторах
+                            {
+                                g_uxMode = UxMode::Authors;
+                            }
+                            break;
+                        }
+                        menuY += 80.f;
+                    }
+                }
+            }
+            // клик на сцене настроек
+            else if (g_uxMode == UxMode::Settings)
+            {
+                // пока просто возврат на StartScreen
+                g_uxMode = UxMode::StartScreen;
+            }
+            // клик на сцене правил
+            else if (g_uxMode == UxMode::Rules)
+            {
+                g_uxMode = UxMode::StartScreen;
+            }
+            // клик на сцене об авторах
+            else if (g_uxMode == UxMode::Authors)
+            {
+                g_uxMode = UxMode::StartScreen;
             }
         }
     }
@@ -2272,27 +2312,100 @@ static void ux_draw_frame()
 
     g_window->clear();
 
-    // === ОТДЕЛЬНАЯ СЦЕНА ПОДТВЕРЖДЕНИЯ ВЫХОДА ===
-    if (g_exitConfirmActive)
+    // === ОТДЕЛЬНАЯ СЦЕНА СТАРТОВОГО МЕНЮ ===
+    if (g_uxMode == UxMode::StartScreen ||
+        g_uxMode == UxMode::Settings ||
+        g_uxMode == UxMode::Rules ||
+        g_uxMode == UxMode::Authors)
     {
-        // Рисуем ТОЛЬКО фон и элементы сцены выхода
-        g_sprBg.setColor(sf::Color(255, 255, 255, (sf::Uint8)g_exitBgAlpha));
+        // 1. Фон
         g_window->draw(g_sprBg);
 
-        g_window->draw(g_exitConfirmTextQuestion);
-        if (!g_exitConfirmed || g_exitConfirmDelayTimer > 0.f)
-            g_window->draw(g_exitConfirmTextInstruction);
-
-        // кнопка выхода рисуется после (ОТДЕЛЬНАЯ ОТ ИГРОВОЙ)
-        if (g_exitButtonVisible)
+        // 2. Заголовок (только на StartScreen)
+        if (g_uxMode == UxMode::StartScreen)
         {
-            g_sprExitContinue.setColor(sf::Color(255, 255, 255, (sf::Uint8)g_exitBgAlpha));
-            g_window->draw(g_sprExitContinue);
-            g_sprExitContinue.setColor(sf::Color(255, 255, 255, 255)); // восстанавливаем
+            g_window->draw(g_scTitleText);
+
+            // 3. Лого
+            if (g_scLogoLoaded)
+                g_window->draw(g_scLogoSprite);
+
+            // 4. Меню
+            float menuY = 380.f;
+            if (g_scCanResume)
+            {
+                for (int i = 0; i < SC_RESUME_COUNT; i++)
+                {
+                    g_scMenuText.setString(SC_RESUME_ITEMS[i]);
+                    auto b = g_scMenuText.getLocalBounds();
+                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                    g_scMenuText.setPosition(960.f, menuY);
+                    g_window->draw(g_scMenuText);
+                    menuY += 80.f;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < SC_MAIN_COUNT; i++)
+                {
+                    g_scMenuText.setString(SC_MAIN_ITEMS[i]);
+                    auto b = g_scMenuText.getLocalBounds();
+                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                    g_scMenuText.setPosition(960.f, menuY);
+                    g_window->draw(g_scMenuText);
+                    menuY += 80.f;
+                }
+            }
+
+            // 5. Статистика
+            g_window->draw(g_statsText);
+        }
+        else if (g_uxMode == UxMode::Settings)
+        {
+            // Заглушка для настроек
+            static sf::Text scSettingsText;
+            scSettingsText.setFont(g_font);
+            scSettingsText.setCharacterSize(48);
+            scSettingsText.setFillColor(sf::Color(255, 165, 0));
+            scSettingsText.setOutlineColor(sf::Color::Black);
+            scSettingsText.setOutlineThickness(2.5f);
+            scSettingsText.setString(L"НАСТРОЙКИ (кликните чтобы вернуться)");
+            auto sb = scSettingsText.getLocalBounds();
+            scSettingsText.setOrigin(sb.width / 2.f, sb.height / 2.f);
+            scSettingsText.setPosition(960.f, 540.f);
+            g_window->draw(scSettingsText);
+        }
+        else if (g_uxMode == UxMode::Rules)
+        {
+            static sf::Text scRulesText;
+            scRulesText.setFont(g_font);
+            scRulesText.setCharacterSize(48);
+            scRulesText.setFillColor(sf::Color(255, 165, 0));
+            scRulesText.setOutlineColor(sf::Color::Black);
+            scRulesText.setOutlineThickness(2.5f);
+            scRulesText.setString(L"ПРАВИЛА ИГРЫ (кликните чтобы вернуться)");
+            auto rb = scRulesText.getLocalBounds();
+            scRulesText.setOrigin(rb.width / 2.f, rb.height / 2.f);
+            scRulesText.setPosition(960.f, 540.f);
+            g_window->draw(scRulesText);
+        }
+        else if (g_uxMode == UxMode::Authors)
+        {
+            static sf::Text scAuthorsText;
+            scAuthorsText.setFont(g_font);
+            scAuthorsText.setCharacterSize(48);
+            scAuthorsText.setFillColor(sf::Color(255, 165, 0));
+            scAuthorsText.setOutlineColor(sf::Color::Black);
+            scAuthorsText.setOutlineThickness(2.5f);
+            scAuthorsText.setString(L"ОБ АВТОРАХ (кликните чтобы вернуться)");
+            auto ab = scAuthorsText.getLocalBounds();
+            scAuthorsText.setOrigin(ab.width / 2.f, ab.height / 2.f);
+            scAuthorsText.setPosition(960.f, 540.f);
+            g_window->draw(scAuthorsText);
         }
 
         g_window->display();
-        return; // выходим — не рисуем игру
+        return;
     }
 
     // === ОБЫЧНАЯ ИГРОВАЯ СЦЕНА ===
@@ -2451,29 +2564,6 @@ void ux_process_frame()
         }
     }
 
-    if (g_exitConfirmFading)
-    {
-        g_exitConfirmAlpha -= 255.f * 0.5f * dt; // 2 секунды на затухание (255 / 2 = 127.5 в сек)
-        g_exitBgAlpha -= 255.f * 0.5f * dt;      // фон и кнопка затухают с той же скоростью
-
-        if (g_exitConfirmAlpha < 0.f)
-            g_exitConfirmAlpha = 0.f;
-        if (g_exitBgAlpha < 0.f)
-            g_exitBgAlpha = 0.f;
-
-        g_exitConfirmTextQuestion.setFillColor(sf::Color(255, 165, 0, (sf::Uint8)g_exitConfirmAlpha));
-        g_exitConfirmTextQuestion.setOutlineColor(sf::Color(0, 0, 0, (sf::Uint8)g_exitConfirmAlpha));
-        g_exitConfirmTextInstruction.setFillColor(sf::Color(255, 165, 0, (sf::Uint8)g_exitConfirmAlpha));
-        g_exitConfirmTextInstruction.setOutlineColor(sf::Color(0, 0, 0, (sf::Uint8)g_exitConfirmAlpha));
-
-        if (g_exitConfirmAlpha == 0.f && g_exitBgAlpha == 0.f)
-        {
-            g_exitConfirmFading = false;
-            g_exitConfirmActive = false;
-            g_shouldExit = true; // теперь выходим
-        }
-    }
-
     // анимация салюта (Game Over)
     if (g_gameOverWithFireworks && g_fireworks)
     {
@@ -2576,6 +2666,12 @@ void ux_wait_gameover_continue()
     {
         if (g_shouldExit)
             return;
+        // если ESC переключил на меню — выходим досрочно
+        if (g_uxMode == UxMode::StartScreen ||
+            g_uxMode == UxMode::Settings ||
+            g_uxMode == UxMode::Rules ||
+            g_uxMode == UxMode::Authors)
+            return;
         ux_process_frame();
     }
 
@@ -2647,9 +2743,66 @@ static std::string rank_to_str(int r)
 // ------------------------------------------------------------
 void ux_shutdown()
 {
-    // Если когда‑нибудь появятся ресурсы, требующие освобождения —
-    // это место для них.
     g_window = nullptr;
+}
+
+// ------------------------------------------------------------
+// UX WAIT START SCREEN — блокирующий показ StartScreen
+// Возвращает: Resume, NewGame или Exit
+// ------------------------------------------------------------
+ScResult ux_wait_start_screen(bool canResume)
+{
+    g_scCanResume = canResume;
+    g_startScreenResult = ScResult::None;
+
+    if (g_uxMode != UxMode::StartScreen)
+    {
+        g_scPrevUxMode = g_uxMode;
+        g_uxMode = UxMode::StartScreen;
+    }
+
+    while (g_startScreenResult == ScResult::None && g_window && g_window->isOpen())
+    {
+        if (g_shouldExit)
+        {
+            g_startScreenResult = ScResult::Exit;
+            break;
+        }
+        ux_process_frame();
+    }
+
+    // если new game — убеждаемся что режим Idle (для инициализации игры)
+    if (g_startScreenResult != ScResult::Resume)
+    {
+        g_uxMode = UxMode::Idle;
+    }
+
+    return g_startScreenResult;
+}
+
+// ------------------------------------------------------------
+// UX IS MENU ACTIVE — проверка что мы в каком-то меню
+// ------------------------------------------------------------
+bool ux_is_menu_active()
+{
+    return (g_uxMode == UxMode::StartScreen ||
+            g_uxMode == UxMode::Settings ||
+            g_uxMode == UxMode::Rules ||
+            g_uxMode == UxMode::Authors);
+}
+
+// ------------------------------------------------------------
+// UX RESET VISUALS — полный сброс для новой игры
+// ------------------------------------------------------------
+void ux_reset_visuals()
+{
+    reset_all_visuals();
+    g_layout = load_layout();
+    g_deckSpr.setPosition(g_layout.deck_pos);
+    g_deckSpr.setRotation(g_layout.deck_angle);
+    g_trumpSpr.setPosition(g_layout.trump_pos);
+    g_trumpSpr.setRotation(g_layout.trump_angle);
+    g_sprAction.setPosition(g_layout.action_pos);
 }
 
 // ------------------------------------------------------------
