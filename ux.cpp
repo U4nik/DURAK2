@@ -11,6 +11,7 @@
 #include "ux.h"
 #include "salut.h"
 #include "rules_text.h"
+#include "authors_text.h"
 using namespace std;
 
 // ------------------------------------------------------------
@@ -273,6 +274,9 @@ static sf::Text g_scMenuText;
 static sf::Texture g_scLogoTexture;
 static sf::Sprite g_scLogoSprite;
 static bool g_scLogoLoaded = false;
+static sf::Texture g_scLogoHoverTexture;
+static sf::Sprite g_scLogoSpriteHover;
+static bool g_scLogoHoverLoaded = false;
 
 // 6 карт-пар на StartScreen (3 пары, левая сторона)
 static std::vector<sf::Sprite> g_scCards;
@@ -342,6 +346,18 @@ static int g_rulesHoveredItem = -1;
 static bool g_rulesLayoutLoaded = false;
 static sf::RectangleShape g_rulesBgRect;
 
+// ------------------------------------------------------------
+// ОБ АВТОРАХ — сцена Authors
+// ------------------------------------------------------------
+static struct {
+    sf::Vector2f titlePos;      int titleSize;
+    sf::Vector2f areaPos;       int areaWidth;   int areaFontSize;
+    float areaLineSpacing;
+    sf::Vector2f menuPos;
+} g_authorsLayout;
+
+static int g_authorsHoveredItem = -1;
+
 // состояние action-кнопки
 static std::string g_actionButtonState = "NONE";
 static float g_actionButtonAlpha = 255.f;     // для fade-анимации
@@ -400,6 +416,7 @@ static void save_settings()
 }
 
 static void load_rules_screen_layout(); // forward
+static void load_authors_screen_layout(); // forward
 
 static void reset_stats(); // forward decl — impl after save_stats()
 
@@ -573,6 +590,70 @@ static void load_rules_screen_layout()
     g_rulesBgRect.setFillColor(sf::Color(50, 50, 50, 200));
     g_rulesBgRect.setOrigin(g_rulesLayout.areaWidth / 2.f, h / 2.f);
     g_rulesBgRect.setPosition(g_rulesLayout.areaPos);
+}
+
+static void load_authors_screen_layout()
+{
+    g_authorsLayout.titlePos = {960.f, 100.f};    g_authorsLayout.titleSize = 64;
+    g_authorsLayout.areaPos = {960.f, 450.f};     g_authorsLayout.areaWidth = 1200;
+    g_authorsLayout.areaFontSize = 32;            g_authorsLayout.areaLineSpacing = 1.5f;
+    g_authorsLayout.menuPos = {960.f, 980.f};
+
+    std::ifstream f("layout_scenes.json");
+    if (!f.is_open()) return;
+
+    std::string json((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+
+    auto getVal = [&](const std::string &key, size_t start) -> float
+    {
+        size_t p = json.find(key, start);
+        if (p == std::string::npos) return 0;
+        p = json.find(":", p);
+        size_t end = json.find_first_of(",}", p + 1);
+        return std::stof(json.substr(p + 1, end - (p + 1)));
+    };
+
+    size_t ss = json.find("\"authors_screen\"");
+    if (ss == std::string::npos) return;
+
+    // title
+    size_t t = json.find("\"title\"", ss);
+    if (t != std::string::npos)
+    {
+        g_authorsLayout.titlePos.x = getVal("\"x\"", t);
+        g_authorsLayout.titlePos.y = getVal("\"y\"", t);
+        g_authorsLayout.titleSize = (int)getVal("\"size\"", t);
+    }
+
+    // text_area
+    size_t a = json.find("\"text_area\"", ss);
+    if (a != std::string::npos)
+    {
+        g_authorsLayout.areaPos.x = getVal("\"x\"", a);
+        g_authorsLayout.areaPos.y = getVal("\"y\"", a);
+        g_authorsLayout.areaWidth = (int)getVal("\"width\"", a);
+        g_authorsLayout.areaFontSize = (int)getVal("\"size\"", a);
+        g_authorsLayout.areaLineSpacing = getVal("\"line_spacing\"", a);
+    }
+
+    // menu (back)
+    size_t m = json.find("\"menu\"", ss);
+    if (m != std::string::npos)
+    {
+        size_t arrStart = json.find("[", m);
+        size_t arrEnd = json.find("]", arrStart);
+        if (arrStart != std::string::npos && arrEnd != std::string::npos)
+        {
+            std::string arr = json.substr(arrStart + 1, arrEnd - arrStart - 1);
+            size_t p = 0;
+            size_t xKey = arr.find("\"x\"", p);
+            if (xKey != std::string::npos)
+            {
+                g_authorsLayout.menuPos.x = getVal("\"x\"", arrStart + p);
+                g_authorsLayout.menuPos.y = getVal("\"y\"", arrStart + p);
+            }
+        }
+    }
 }
 
 // звуки — обёртка с проверкой настройки
@@ -1123,6 +1204,7 @@ void ux_init(sf::RenderWindow *win)
     load_start_screen_layout();
     load_settings_screen_layout();
     load_rules_screen_layout();
+    load_authors_screen_layout();
 
     // Заголовок
     g_scTitleText.setString(L"ПОДКИДНОЙ ДУРАК");
@@ -1135,6 +1217,15 @@ void ux_init(sf::RenderWindow *win)
         g_scLogoSprite.setTexture(g_scLogoTexture);
         g_scLogoSprite.setScale(g_scLayout.logoScale, g_scLayout.logoScale);
         g_scLogoSprite.setPosition(g_scLayout.logoPos);
+
+        // загрузка лого для ховера на «Выход из игры»
+        g_scLogoHoverLoaded = g_scLogoHoverTexture.loadFromFile("emotion/logo_start_game4.png");
+        if (g_scLogoHoverLoaded)
+        {
+            g_scLogoSpriteHover.setTexture(g_scLogoHoverTexture);
+            g_scLogoSpriteHover.setScale(g_scLayout.logoScale, g_scLayout.logoScale);
+            g_scLogoSpriteHover.setPosition(g_scLayout.logoPos);
+        }
     }
 
     // 6 случайных карт (3 пары слева)
@@ -2152,11 +2243,6 @@ static void ux_handle_events()
             if (g_uxMode == UxMode::Settings)
             {
                 g_setHoveredItem = -1;
-                // левый край подзаголовка для indent-а
-                g_scMenuText.setString(L"Сортировка карт в руке");
-                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
-                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
-
                 for (int i = 0; i < SET_COUNT; i++)
                 {
                     sf::Vector2f pos = g_setLayout.menuPos[i];
@@ -2213,6 +2299,19 @@ static void ux_handle_events()
                 g_scMenuText.setPosition(g_rulesLayout.menuPos);
                 if (g_scMenuText.getGlobalBounds().contains(mp))
                     g_rulesHoveredItem = 0;
+            }
+
+            // hover на сцене об авторах
+            if (g_uxMode == UxMode::Authors)
+            {
+                g_authorsHoveredItem = -1;
+                g_scMenuText.setString(L"Возврат в основное меню");
+                g_scMenuText.setCharacterSize(48);
+                auto b = g_scMenuText.getLocalBounds();
+                g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                g_scMenuText.setPosition(g_authorsLayout.menuPos);
+                if (g_scMenuText.getGlobalBounds().contains(mp))
+                    g_authorsHoveredItem = 0;
             }
 
             // закрытие окна (крестик)
@@ -2421,11 +2520,6 @@ static void ux_handle_events()
             // клик на сцене настроек
             else if (g_uxMode == UxMode::Settings)
             {
-                // левый край подзаголовка для indent-а
-                g_scMenuText.setString(L"Сортировка карт в руке");
-                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
-                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
-
                 for (int i = 0; i < SET_COUNT; i++)
                 {
                     sf::Vector2f pos = g_setLayout.menuPos[i];
@@ -2463,16 +2557,8 @@ static void ux_handle_events()
                     g_scMenuText.setString(text);
                     g_scMenuText.setCharacterSize(sz);
                     auto b = g_scMenuText.getLocalBounds();
-                    if (g_setLayout.menuIndent[i] > 0)
-                    {
-                        g_scMenuText.setOrigin(0, b.height / 2.f);
-                        g_scMenuText.setPosition(subLeft + g_setLayout.menuIndent[i], pos.y);
-                    }
-                    else
-                    {
-                        g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                        g_scMenuText.setPosition(pos);
-                    }
+                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                    g_scMenuText.setPosition(pos);
                     if (!g_scMenuText.getGlobalBounds().contains(mp))
                         continue;
                     // клик попал в пункт i
@@ -2539,7 +2625,13 @@ static void ux_handle_events()
             // клик на сцене об авторах
             else if (g_uxMode == UxMode::Authors)
             {
-                g_uxMode = UxMode::StartScreen;
+                g_scMenuText.setString(L"Возврат в основное меню");
+                g_scMenuText.setCharacterSize(48);
+                auto mb = g_scMenuText.getLocalBounds();
+                g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
+                g_scMenuText.setPosition(g_authorsLayout.menuPos);
+                if (g_scMenuText.getGlobalBounds().contains(mp))
+                    g_uxMode = UxMode::StartScreen;
             }
         }
     }
@@ -2982,9 +3074,14 @@ static void ux_draw_frame()
             g_scTitleText.setPosition(g_scLayout.titlePos);
             g_window->draw(g_scTitleText);
 
-            // 3. Лого
+            // 3. Лого (меняем на logo_start_game4.png при ховере на «Выход из игры»)
             if (g_scLogoLoaded)
-                g_window->draw(g_scLogoSprite);
+            {
+                if (g_scHoveredMenuItem == 4 && g_scLogoHoverLoaded)
+                    g_window->draw(g_scLogoSpriteHover);
+                else
+                    g_window->draw(g_scLogoSprite);
+            }
 
             // 4. Меню из layout
             if (g_scCanResume)
@@ -3003,8 +3100,8 @@ static void ux_draw_frame()
                     g_scMenuText.setPosition(pos);
                     if (i == g_scHoveredMenuItem)
                     {
-                        g_scMenuText.setOutlineThickness(4.f);
-                        g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                        g_scMenuText.setOutlineThickness(2.5f);
+                        g_scMenuText.setFillColor(sf::Color(255, 255, 0));
                     }
                     else
                     {
@@ -3029,8 +3126,8 @@ static void ux_draw_frame()
                     g_scMenuText.setPosition(pos);
                     if (i == g_scHoveredMenuItem)
                     {
-                        g_scMenuText.setOutlineThickness(4.f);
-                        g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                        g_scMenuText.setOutlineThickness(2.5f);
+                        g_scMenuText.setFillColor(sf::Color(255, 255, 0));
                     }
                     else
                     {
@@ -3075,11 +3172,6 @@ static void ux_draw_frame()
             g_window->draw(g_scTitleText);
 
                 // 4. Пункты меню
-                // вычисляем левый край подзаголовка для indent-а
-                g_scMenuText.setString(L"Сортировка карт в руке");
-                g_scMenuText.setCharacterSize(g_setLayout.subtitleSize);
-                float subLeft = g_setLayout.subtitlePos.x - g_scMenuText.getLocalBounds().width / 2.f;
-
                 static const wchar_t* SET_LABELS[SET_COUNT] = {
                 L"Возврат в основное меню",
                 L"Козыри: ",
@@ -3137,8 +3229,8 @@ static void ux_draw_frame()
 
                 if (i == g_setHoveredItem)
                 {
-                    g_scMenuText.setOutlineThickness(4.f);
-                    g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                    g_scMenuText.setOutlineThickness(2.5f);
+                    g_scMenuText.setFillColor(sf::Color(255, 255, 0));
                 }
                 else
                 {
@@ -3147,16 +3239,8 @@ static void ux_draw_frame()
                 }
 
                 auto b = g_scMenuText.getLocalBounds();
-                if (g_setLayout.menuIndent[i] > 0)
-                {
-                    g_scMenuText.setOrigin(0, b.height / 2.f);
-                    g_scMenuText.setPosition(subLeft + g_setLayout.menuIndent[i], pos.y);
-                }
-                else
-                {
-                    g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
-                    g_scMenuText.setPosition(pos);
-                }
+                g_scMenuText.setOrigin(b.width / 2.f, b.height / 2.f);
+                g_scMenuText.setPosition(pos);
                 g_window->draw(g_scMenuText);
             }
         }
@@ -3194,8 +3278,8 @@ static void ux_draw_frame()
             g_scMenuText.setPosition(g_rulesLayout.menuPos);
             if (g_rulesHoveredItem == 0)
             {
-                g_scMenuText.setOutlineThickness(4.f);
-                g_scMenuText.setFillColor(sf::Color(255, 200, 50));
+                g_scMenuText.setOutlineThickness(2.5f);
+                g_scMenuText.setFillColor(sf::Color(255, 255, 0));
             }
             else
             {
@@ -3206,17 +3290,45 @@ static void ux_draw_frame()
         }
         else if (g_uxMode == UxMode::Authors)
         {
-            static sf::Text scAuthorsText;
-            scAuthorsText.setFont(g_font);
-            scAuthorsText.setCharacterSize(48);
-            scAuthorsText.setFillColor(sf::Color(255, 165, 0));
-            scAuthorsText.setOutlineColor(sf::Color::Black);
-            scAuthorsText.setOutlineThickness(2.5f);
-            scAuthorsText.setString(L"ОБ АВТОРАХ (кликните чтобы вернуться)");
-            auto ab = scAuthorsText.getLocalBounds();
-            scAuthorsText.setOrigin(ab.width / 2.f, ab.height / 2.f);
-            scAuthorsText.setPosition(960.f, 540.f);
-            g_window->draw(scAuthorsText);
+            // заголовок
+            g_scTitleText.setString(L"ОБ АВТОРАХ");
+            g_scTitleText.setCharacterSize(g_authorsLayout.titleSize);
+            auto tb = g_scTitleText.getLocalBounds();
+            g_scTitleText.setOrigin(tb.width / 2.f, tb.height / 2.f);
+            g_scTitleText.setPosition(g_authorsLayout.titlePos);
+            g_window->draw(g_scTitleText);
+
+            // текст (оранжевый с обводкой, без фона)
+            static sf::Text authorsText;
+            authorsText.setFont(g_font);
+            authorsText.setString(AUTHORS_TEXT);
+            authorsText.setCharacterSize(g_authorsLayout.areaFontSize);
+            authorsText.setFillColor(sf::Color(255, 165, 0));
+            authorsText.setOutlineColor(sf::Color::Black);
+            authorsText.setOutlineThickness(2.5f);
+            authorsText.setLineSpacing(g_authorsLayout.areaLineSpacing);
+            auto ab = authorsText.getLocalBounds();
+            authorsText.setOrigin(ab.width / 2.f, ab.height / 2.f);
+            authorsText.setPosition(g_authorsLayout.areaPos);
+            g_window->draw(authorsText);
+
+            // меню "Возврат в основное меню"
+            g_scMenuText.setString(L"Возврат в основное меню");
+            g_scMenuText.setCharacterSize(48);
+            auto mb = g_scMenuText.getLocalBounds();
+            g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
+            g_scMenuText.setPosition(g_authorsLayout.menuPos);
+            if (g_authorsHoveredItem == 0)
+            {
+                g_scMenuText.setOutlineThickness(2.5f);
+                g_scMenuText.setFillColor(sf::Color(255, 255, 0));
+            }
+            else
+            {
+                g_scMenuText.setOutlineThickness(2.5f);
+                g_scMenuText.setFillColor(sf::Color(255, 165, 0));
+            }
+            g_window->draw(g_scMenuText);
         }
 
         g_window->display();
