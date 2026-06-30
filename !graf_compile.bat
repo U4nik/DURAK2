@@ -3,10 +3,10 @@ cls
 echo === COMPILING LAYOUT EDITOR ===
 
 rem Путь к MinGW
-set MINGW_PATH=E:\mingw64\bin
+set MINGW_PATH=G:\mingw64\bin
 
 rem Путь к SFML
-set SFML_PATH=E:\SFML
+set SFML_PATH=G:\SFML
 
 rem Добавляем MinGW в PATH
 set PATH=%MINGW_PATH%;%PATH%
