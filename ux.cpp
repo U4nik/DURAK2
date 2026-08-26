@@ -580,16 +580,11 @@ static void load_rules_screen_layout()
 
     g_rulesLayoutLoaded = true;
 
-    // инициализация полупрозрачного прямоугольника
-    // вычислим высоту: кол-во строк * кегль * line_spacing
-    int lineCount = 1;
-    for (auto ch : RULES_TEXT)
-        if (ch == L'\n') lineCount++;
-    float h = lineCount * g_rulesLayout.areaFontSize * g_rulesLayout.areaLineSpacing;
-    g_rulesBgRect.setSize(sf::Vector2f((float)g_rulesLayout.areaWidth, h));
+    // инициализация полноэкранного полупрозрачного оверлея
+    g_rulesBgRect.setSize(sf::Vector2f(1920.f, 1080.f));
     g_rulesBgRect.setFillColor(sf::Color(50, 50, 50, 200));
-    g_rulesBgRect.setOrigin(g_rulesLayout.areaWidth / 2.f, h / 2.f);
-    g_rulesBgRect.setPosition(g_rulesLayout.areaPos);
+    g_rulesBgRect.setOrigin(0.f, 0.f);
+    g_rulesBgRect.setPosition(0.f, 0.f);
 }
 
 static void load_authors_screen_layout()
@@ -3143,6 +3138,9 @@ static void ux_draw_frame()
         }
         else if (g_uxMode == UxMode::Settings)
         {
+            // 0. Полупрозрачный оверлей
+            g_window->draw(g_rulesBgRect);
+
             // 1. Заголовок
             g_scTitleText.setString(L"НАСТРОЙКИ");
             g_scTitleText.setCharacterSize(g_setLayout.titleSize);
@@ -3257,13 +3255,14 @@ static void ux_draw_frame()
             g_scTitleText.setPosition(g_rulesLayout.titlePos);
             g_window->draw(g_scTitleText);
 
-            // текст правил (без обводки, светло-серый)
+            // текст правил (жёлтый с чёрной обводкой)
             static sf::Text rulesText;
             rulesText.setFont(g_font);
             rulesText.setString(RULES_TEXT);
             rulesText.setCharacterSize(g_rulesLayout.areaFontSize);
-            rulesText.setFillColor(sf::Color(220, 220, 220));
-            rulesText.setOutlineThickness(0);
+            rulesText.setFillColor(sf::Color::Yellow);
+            rulesText.setOutlineColor(sf::Color::Black);
+            rulesText.setOutlineThickness(2.5f);
             rulesText.setLineSpacing(g_rulesLayout.areaLineSpacing);
             auto rb = rulesText.getLocalBounds();
             rulesText.setOrigin(rb.width / 2.f, rb.height / 2.f);
@@ -3290,6 +3289,9 @@ static void ux_draw_frame()
         }
         else if (g_uxMode == UxMode::Authors)
         {
+            // 0. Полупрозрачный оверлей
+            g_window->draw(g_rulesBgRect);
+
             // заголовок
             g_scTitleText.setString(L"ОБ АВТОРАХ");
             g_scTitleText.setCharacterSize(g_authorsLayout.titleSize);
