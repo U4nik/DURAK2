@@ -346,6 +346,14 @@ static int g_rulesHoveredItem = -1;
 static bool g_rulesLayoutLoaded = false;
 static sf::RectangleShape g_rulesBgRect;
 
+// прокрутка для правил
+static float g_rulesScroll = 0.f;
+static float g_rulesMaxScroll = 0.f;
+static const float RULES_SCROLL_STEP = 75.f;
+static sf::FloatRect g_rulesArrowUpRect;
+static sf::FloatRect g_rulesArrowDownRect;
+static int g_rulesArrowHover = -1;   // -1=none, 0=up, 1=down
+
 // ------------------------------------------------------------
 // ОБ АВТОРАХ — сцена Authors
 // ------------------------------------------------------------
@@ -518,8 +526,8 @@ static void load_settings_screen_layout()
 static void load_rules_screen_layout()
 {
     g_rulesLayout.titlePos = {960.f, 100.f};    g_rulesLayout.titleSize = 64;
-    g_rulesLayout.areaPos = {960.f, 520.f};     g_rulesLayout.areaWidth = 1400;
-    g_rulesLayout.areaFontSize = 28;            g_rulesLayout.areaLineSpacing = 1.5f;
+    g_rulesLayout.areaPos = {960.f, 230.f};     g_rulesLayout.areaWidth = 1400;
+    g_rulesLayout.areaFontSize = 24;            g_rulesLayout.areaLineSpacing = 1.5f;
     g_rulesLayout.menuPos = {960.f, 980.f};
 
     std::ifstream f("layout_scenes.json");
@@ -585,6 +593,10 @@ static void load_rules_screen_layout()
     g_rulesBgRect.setFillColor(sf::Color(50, 50, 50, 200));
     g_rulesBgRect.setOrigin(0.f, 0.f);
     g_rulesBgRect.setPosition(0.f, 0.f);
+
+    // инициализация хитбоксов стрелок
+    g_rulesArrowUpRect   = sf::FloatRect(1730.f, g_rulesLayout.titlePos.y + 70.f, 50.f, 50.f);
+    g_rulesArrowDownRect = sf::FloatRect(1730.f, g_rulesLayout.menuPos.y - 80.f, 50.f, 50.f);
 }
 
 static void load_authors_screen_layout()
@@ -2287,6 +2299,13 @@ static void ux_handle_events()
             if (g_uxMode == UxMode::Rules)
             {
                 g_rulesHoveredItem = -1;
+                g_rulesArrowHover = -1;
+                // hover стрелок
+                if (g_rulesArrowUpRect.contains(mp))
+                    g_rulesArrowHover = 0;
+                else if (g_rulesArrowDownRect.contains(mp))
+                    g_rulesArrowHover = 1;
+                // hover кнопки "Возврат в основное меню"
                 g_scMenuText.setString(L"Возврат в основное меню");
                 g_scMenuText.setCharacterSize(48);
                 auto b = g_scMenuText.getLocalBounds();
@@ -2308,6 +2327,14 @@ static void ux_handle_events()
                 if (g_scMenuText.getGlobalBounds().contains(mp))
                     g_authorsHoveredItem = 0;
             }
+
+            // колесо мыши — прокрутка правил
+        if (e.type == sf::Event::MouseWheelScrolled && g_uxMode == UxMode::Rules)
+        {
+            g_rulesScroll -= e.mouseWheelScroll.delta * RULES_SCROLL_STEP;
+            if (g_rulesScroll < 0.f) g_rulesScroll = 0.f;
+            if (g_rulesScroll > g_rulesMaxScroll) g_rulesScroll = g_rulesMaxScroll;
+        }
 
             // закрытие окна (крестик)
         if (e.type == sf::Event::Closed)
@@ -2497,6 +2524,9 @@ static void ux_handle_events()
                             }
                             else if (i == 2) // Правила игры
                             {
+                                g_rulesScroll = 0.f;
+                                g_rulesMaxScroll = 0.f;
+                                g_rulesArrowHover = -1;
                                 g_uxMode = UxMode::Rules;
                             }
                             else if (i == 3) // Об авторах
@@ -2609,13 +2639,27 @@ static void ux_handle_events()
             // клик на сцене правил
             else if (g_uxMode == UxMode::Rules)
             {
-                g_scMenuText.setString(L"Возврат в основное меню");
-                g_scMenuText.setCharacterSize(48);
-                auto mb = g_scMenuText.getLocalBounds();
-                g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
-                g_scMenuText.setPosition(g_rulesLayout.menuPos);
-                if (g_scMenuText.getGlobalBounds().contains(mp))
-                    g_uxMode = UxMode::StartScreen;
+                // стрелки прокрутки
+                if (g_rulesArrowUpRect.contains(mp) && g_rulesScroll > 0.f)
+                {
+                    g_rulesScroll -= RULES_SCROLL_STEP;
+                    if (g_rulesScroll < 0.f) g_rulesScroll = 0.f;
+                }
+                else if (g_rulesArrowDownRect.contains(mp) && g_rulesScroll < g_rulesMaxScroll)
+                {
+                    g_rulesScroll += RULES_SCROLL_STEP;
+                    if (g_rulesScroll > g_rulesMaxScroll) g_rulesScroll = g_rulesMaxScroll;
+                }
+                else
+                {
+                    g_scMenuText.setString(L"Возврат в основное меню");
+                    g_scMenuText.setCharacterSize(48);
+                    auto mb = g_scMenuText.getLocalBounds();
+                    g_scMenuText.setOrigin(mb.width / 2.f, mb.height / 2.f);
+                    g_scMenuText.setPosition(g_rulesLayout.menuPos);
+                    if (g_scMenuText.getGlobalBounds().contains(mp))
+                        g_uxMode = UxMode::StartScreen;
+                }
             }
             // клик на сцене об авторах
             else if (g_uxMode == UxMode::Authors)
@@ -3255,19 +3299,68 @@ static void ux_draw_frame()
             g_scTitleText.setPosition(g_rulesLayout.titlePos);
             g_window->draw(g_scTitleText);
 
-            // текст правил (жёлтый с чёрной обводкой)
+            // текст правил (травяной зелёный, без обводки, с прокруткой)
             static sf::Text rulesText;
             rulesText.setFont(g_font);
             rulesText.setString(RULES_TEXT);
             rulesText.setCharacterSize(g_rulesLayout.areaFontSize);
-            rulesText.setFillColor(sf::Color::Yellow);
-            rulesText.setOutlineColor(sf::Color::Black);
-            rulesText.setOutlineThickness(2.5f);
+            rulesText.setFillColor(sf::Color(50, 205, 50));
+            rulesText.setOutlineThickness(0.f);
             rulesText.setLineSpacing(g_rulesLayout.areaLineSpacing);
             auto rb = rulesText.getLocalBounds();
-            rulesText.setOrigin(rb.width / 2.f, rb.height / 2.f);
-            rulesText.setPosition(g_rulesLayout.areaPos);
-            g_window->draw(rulesText);
+            // вычисляем maxScroll при первой отрисовке
+            if (g_rulesMaxScroll <= 0.f && rb.height > 0.f)
+            {
+                float clipTop = g_rulesArrowUpRect.top + g_rulesArrowUpRect.height;
+                float clipBottom = g_rulesArrowDownRect.top;
+                float visibleArea = clipBottom - clipTop;
+                g_rulesMaxScroll = std::max(0.f, rb.height - visibleArea);
+            }
+            rulesText.setOrigin(rb.width / 2.f, 0.f);
+            rulesText.setPosition(g_rulesLayout.areaPos.x, g_rulesLayout.areaPos.y - g_rulesScroll);
+            // клиппинг текста: не вылезать за границы между стрелками
+            {
+                sf::View origView = g_window->getView();
+                float clipTop = g_rulesArrowUpRect.top + g_rulesArrowUpRect.height + 5.f;
+                float clipBottom = g_rulesArrowDownRect.top - 5.f;
+                float winH = 1080.f;
+                float winW = 1920.f;
+                float clipH = clipBottom - clipTop;
+                sf::View clipView(sf::FloatRect(0.f, clipTop, winW, clipH));
+                clipView.setViewport(sf::FloatRect(0.f, clipTop / winH, 1.f, clipH / winH));
+                g_window->setView(clipView);
+                g_window->draw(rulesText);
+                g_window->setView(origView);
+            }
+
+            // стрелки прокрутки
+            {
+                sf::Text arrowText;
+                arrowText.setFont(g_font);
+                arrowText.setCharacterSize(48);
+                // ▲ (вверх) — видна, если есть что скроллить вверх
+                if (g_rulesScroll > 0.f)
+                {
+                    arrowText.setString(L"▲");
+                    arrowText.setFillColor(g_rulesArrowHover == 0 ? sf::Color::Yellow : sf::Color(50, 205, 50, 200));
+                    arrowText.setOutlineThickness(0.f);
+                    auto ab = arrowText.getLocalBounds();
+                    arrowText.setOrigin(ab.width / 2.f, ab.height / 2.f);
+                    arrowText.setPosition(g_rulesArrowUpRect.left + g_rulesArrowUpRect.width / 2.f, g_rulesArrowUpRect.top + g_rulesArrowUpRect.height / 2.f);
+                    g_window->draw(arrowText);
+                }
+                // ▼ (вниз) — видна, если есть что скроллить вниз
+                if (g_rulesScroll < g_rulesMaxScroll)
+                {
+                    arrowText.setString(L"▼");
+                    arrowText.setFillColor(g_rulesArrowHover == 1 ? sf::Color::Yellow : sf::Color(50, 205, 50, 200));
+                    arrowText.setOutlineThickness(0.f);
+                    auto ab = arrowText.getLocalBounds();
+                    arrowText.setOrigin(ab.width / 2.f, ab.height / 2.f);
+                    arrowText.setPosition(g_rulesArrowDownRect.left + g_rulesArrowDownRect.width / 2.f, g_rulesArrowDownRect.top + g_rulesArrowDownRect.height / 2.f);
+                    g_window->draw(arrowText);
+                }
+            }
 
             // меню "Возврат в основное меню"
             g_scMenuText.setString(L"Возврат в основное меню");
