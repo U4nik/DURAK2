@@ -526,7 +526,7 @@ static void load_settings_screen_layout()
 static void load_rules_screen_layout()
 {
     g_rulesLayout.titlePos = {960.f, 100.f};    g_rulesLayout.titleSize = 64;
-    g_rulesLayout.areaPos = {960.f, 230.f};     g_rulesLayout.areaWidth = 1400;
+    g_rulesLayout.areaPos = {1040.f, 250.f};     g_rulesLayout.areaWidth = 1400;
     g_rulesLayout.areaFontSize = 24;            g_rulesLayout.areaLineSpacing = 1.5f;
     g_rulesLayout.menuPos = {960.f, 980.f};
 
@@ -3311,10 +3311,9 @@ static void ux_draw_frame()
             // вычисляем maxScroll при первой отрисовке
             if (g_rulesMaxScroll <= 0.f && rb.height > 0.f)
             {
-                float clipTop = g_rulesArrowUpRect.top + g_rulesArrowUpRect.height;
                 float clipBottom = g_rulesArrowDownRect.top;
-                float visibleArea = clipBottom - clipTop;
-                g_rulesMaxScroll = std::max(0.f, rb.height - visibleArea);
+                float visibleArea = clipBottom - g_rulesLayout.areaPos.y;
+                g_rulesMaxScroll = std::max(0.f, rb.height - visibleArea + 60.f);
             }
             rulesText.setOrigin(rb.width / 2.f, 0.f);
             rulesText.setPosition(g_rulesLayout.areaPos.x, g_rulesLayout.areaPos.y - g_rulesScroll);

@@ -169,8 +169,8 @@
       "size": 64
     },
     "text_area": {
-      "x": 960,
-      "y": 520,
+      "x": 1040,
+      "y": 250,
       "width": 1400,
       "size": 24,
       "line_spacing": 1.5
