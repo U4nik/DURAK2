@@ -2365,7 +2365,13 @@ static void ux_handle_events()
             }
             else if (g_uxMode == UxMode::GameOver)
             {
-                // ESC на GameOver — игнорируем (игрок жмёт Continue)
+                // ESC на GameOver = аналог клика по кнопке "Продолжить"
+                g_gameOverContinueClicked = true;
+                if (g_fireworks)
+                {
+                    g_fireworks->stop();
+                    g_gameOverWithFireworks = false;
+                }
             }
             else
             {

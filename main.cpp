@@ -1379,9 +1379,12 @@ void print_ux_diff(const State &old, const State &st)
         const Card &c = st.table[idx].attack;
         Side who = detect_who_played();
 
-        // Пауза перед ходом бота
+        // Пауза перед ходом бота (доброс вдогонку — медленнее)
         if (who == BOT)
-            ux_cmd("WAIT", {"500"});
+        {
+            bool isExtraAttack = !old.table.empty();
+            ux_cmd("WAIT", {isExtraAttack ? "800" : "500"});
+        }
 
         ux_cmd("WAIT", {"120"});
         ux_cmd("PLAY_ATTACK",
@@ -1432,8 +1435,8 @@ void print_ux_diff(const State &old, const State &st)
         else
             ux_cmd("UPDATE_EMOTION", std::vector<std::string>{"SADNESS"});
 
-        // Пауза перед анимацией взятия карт со стола
-        ux_cmd("WAIT", {"240"});
+        // [ЭКСТРА-ДОБРОС] Пауза перед забором стола — игрок видит финальный расклад (2400ms)
+        ux_cmd("WAIT", {"2400"});
 
         ux_cmd("TABLE_TO_HAND",
                std::vector<std::string>{
