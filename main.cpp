@@ -1379,12 +1379,9 @@ void print_ux_diff(const State &old, const State &st)
         const Card &c = st.table[idx].attack;
         Side who = detect_who_played();
 
-        // Пауза перед ходом бота (доброс вдогонку — медленнее)
+        // Пауза перед ходом бота
         if (who == BOT)
-        {
-            bool isExtraAttack = !old.table.empty();
-            ux_cmd("WAIT", {isExtraAttack ? "800" : "500"});
-        }
+            ux_cmd("WAIT", {"500"});
 
         ux_cmd("WAIT", {"120"});
         ux_cmd("PLAY_ATTACK",
