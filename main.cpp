@@ -1336,11 +1336,11 @@ void print_ux_diff(const State &old, const State &st)
         {
             ux_cmd("DEAL_CARD",
                    {"PLR", card_to_string(st.hand_plr[i])});
-            // ux_cmd("WAIT", {"120"});
+            ux_cmd("WAIT", {"120"});
 
             ux_cmd("DEAL_CARD",
                    {"BOT", card_to_string(st.hand_bot[i])});
-            // ux_cmd("WAIT", {"120"});
+            ux_cmd("WAIT", {"120"});
         }
 
         ux_cmd("SET_TRUMP",
@@ -2728,6 +2728,7 @@ int main()
         "Durak",
         sf::Style::Fullscreen);
     window.setFramerateLimit(60);
+    window.setVerticalSyncEnabled(true);
 
     ux_init(&window); // <- функция из UX 2.0 (B2: окно создаёт движок)
 

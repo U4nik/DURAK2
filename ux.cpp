@@ -703,7 +703,8 @@ static void animate_cards(
     vector<CardVisual> &hand,
     sf::Texture cardTex[4][9],
     const sf::Texture &texBack,
-    const Layout &L);
+    const Layout &L,
+    float dt);
 
 static void update_hover_effects(
     std::vector<CardVisual> &hand,
@@ -1715,9 +1716,10 @@ static void animate_cards(
     vector<CardVisual> &hand,
     sf::Texture cardTex[4][9],
     const sf::Texture &texBack,
-    const Layout &L)
-{ //  скорость анимации
-    const float speed = 30.f;
+    const Layout &L,
+    float dt)
+{ //  скорость анимации (time-based, ~1800 px/сек)
+    const float speed = 1800.f;
 
     for (auto it = hand.begin(); it != hand.end(); /* in-loop */)
     {
@@ -1745,11 +1747,11 @@ static void animate_cards(
         if (dist > 1.f)
         {
             dir /= dist;
-            float step = std::min(speed, dist);
+            float step = std::min(speed * dt, dist);
             v.currentPos += dir * step;
 
-            // позиция во время полёта — БЕЗ shake/lift
-            v.sprite.setPosition(v.currentPos);
+            // позиция во время полёта — БЕЗ shake/lift (округляем для чёткости)
+            v.sprite.setPosition(std::round(v.currentPos.x), std::round(v.currentPos.y));
 
             // отбой
             if (v.state == MovingToDiscard)
@@ -3610,9 +3612,9 @@ void ux_process_frame()
         ux_handle_events();
         update_card_effects(g_vis_plr, dt);
         update_card_effects(g_vis_bot, dt);
-        animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout);
-        animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout);
-        animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout);
+        animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout, dt);
+        animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout, dt);
+        animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout, dt);
         ux_draw_frame();
         return;
     }
@@ -3638,9 +3640,9 @@ void ux_process_frame()
             ux_handle_events();
             update_card_effects(g_vis_plr, dt);
             update_card_effects(g_vis_bot, dt);
-            animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout);
-            animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout);
-            animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout);
+            animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout, dt);
+            animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout, dt);
+            animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout, dt);
             ux_draw_frame();
             return;
         }
@@ -3682,9 +3684,9 @@ void ux_process_frame()
     ux_handle_events();
     update_card_effects(g_vis_plr, dt);
     update_card_effects(g_vis_bot, dt);
-    animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout);
-    animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout);
-    animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout);
+    animate_cards(g_vis_plr, g_cardTex, g_texBack, g_layout, dt);
+    animate_cards(g_vis_bot, g_cardTex, g_texBack, g_layout, dt);
+    animate_cards(g_tableVisuals, g_cardTex, g_texBack, g_layout, dt);
     ux_draw_frame();
 }
 
