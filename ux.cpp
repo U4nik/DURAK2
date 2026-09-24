@@ -1654,7 +1654,10 @@ static void sort_hand(
     const vector<float> &anchorsY)
 {
     if (hand.size() <= 1)
+    {
+        layout_hand(hand, centerX, y, anchorsY);
         return;
+    }
 
     const std::string &mode = g_settings.card_sort_mode;
     const std::string &dir = g_settings.card_sort_direction;
@@ -2016,9 +2019,9 @@ static void add_card_to_hand(
 
     // пересчитать цели для всех карт руки
     if (owner == PLR)
-        layout_hand(hand, centerX, y, g_handAnchorsPlrY);
+        sort_hand(hand, centerX, y, g_handAnchorsPlrY);
     else
-        layout_hand(hand, centerX, y, g_handAnchorsBotY);
+        sort_hand(hand, centerX, y, g_handAnchorsBotY);
 }
 
 // ------------------------------------------------------------
@@ -2162,9 +2165,9 @@ static void start_table_to_hand(
 
     // пересчитать раскладку руки
     if (taker == PLR)
-        layout_hand(vis_plr, L.center_x, L.plr_y, g_handAnchorsPlrY);
+        sort_hand(vis_plr, L.center_x, L.plr_y, g_handAnchorsPlrY);
     else
-        layout_hand(vis_bot, L.center_x, L.bot_y, g_handAnchorsBotY);
+        sort_hand(vis_bot, L.center_x, L.bot_y, g_handAnchorsBotY);
 }
 // ------------------------------------------------------------
 // FIND MOVE INDEX BY STRING
