@@ -230,6 +230,10 @@ static sf::Text g_statsText;
 // эмоция — картинка (левый верхний угол)
 static sf::Texture g_texEmotion[3];
 static sf::Sprite g_sprEmotion;
+static sf::Texture g_texAttak;
+static sf::Texture g_texDefense;
+static sf::Sprite g_sprBotRole;   // верх-левый угол (под эмоцией)
+static sf::Sprite g_sprPlrRole;   // низ-левый угол
 
 static int g_statsPlrWins = 0;
 static int g_statsBotWins = 0;
@@ -990,6 +994,18 @@ void ux_init(sf::RenderWindow *win)
     g_sprEmotion.setTexture(g_texEmotion[0]);
     g_sprEmotion.setScale(0.3f, 0.3f);
     g_sprEmotion.setPosition(20.f, 20.f);
+
+    // иконки атакер/защитник
+    g_texAttak.loadFromFile("emotion/attak.png");
+    g_texDefense.loadFromFile("emotion/defense.png");
+    g_sprBotRole.setTexture(g_texDefense);
+    g_sprBotRole.setOrigin(g_texDefense.getSize().x / 2.f, g_texDefense.getSize().y / 2.f);
+    g_sprBotRole.setScale(0.15f, 0.15f);
+    g_sprBotRole.setPosition(105.f, 250.f);
+    g_sprPlrRole.setTexture(g_texAttak);
+    g_sprPlrRole.setOrigin(g_texAttak.getSize().x / 2.f, g_texAttak.getSize().y / 2.f);
+    g_sprPlrRole.setScale(0.15f, -0.15f);
+    g_sprPlrRole.setPosition(105.f, 830.f);
 
     // загружаем статистику из файла
     load_stats();
@@ -2787,6 +2803,28 @@ void ux_run_command(const UxCommand &cmd)
             g_sprEmotion.setTexture(g_texEmotion[1]);
     }
 
+    else if (cmd.name == "UPDATE_ROLES")
+    {
+        if (cmd.args[0] == "PLR")
+        {   // игрок атакует → меч у игрока (перевёрнут), щит у бота
+            g_sprPlrRole.setTexture(g_texAttak);
+            g_sprPlrRole.setOrigin(g_texAttak.getSize().x / 2.f, g_texAttak.getSize().y / 2.f);
+            g_sprPlrRole.setScale(0.15f, -0.15f);
+            g_sprBotRole.setTexture(g_texDefense);
+            g_sprBotRole.setOrigin(g_texDefense.getSize().x / 2.f, g_texDefense.getSize().y / 2.f);
+            g_sprBotRole.setScale(0.15f, 0.15f);
+        }
+        else
+        {   // бот атакует → меч у бота, щит у игрока
+            g_sprBotRole.setTexture(g_texAttak);
+            g_sprBotRole.setOrigin(g_texAttak.getSize().x / 2.f, g_texAttak.getSize().y / 2.f);
+            g_sprBotRole.setScale(0.15f, 0.15f);
+            g_sprPlrRole.setTexture(g_texDefense);
+            g_sprPlrRole.setOrigin(g_texDefense.getSize().x / 2.f, g_texDefense.getSize().y / 2.f);
+            g_sprPlrRole.setScale(0.15f, 0.15f);
+        }
+    }
+
     else if (cmd.name == "TABLE_TO_HAND")
     {
         play_sound(g_soundTake);
@@ -3009,6 +3047,10 @@ void ux_run_command(const UxCommand &cmd)
         // скрыть спрайт масти козыря
         g_sprTrumpSuit.setColor(sf::Color(255, 255, 255, 0));
         g_showTrumpSuit = false;
+
+        // скрыть иконки ролей
+        g_sprBotRole.setColor(sf::Color(255, 255, 255, 0));
+        g_sprPlrRole.setColor(sf::Color(255, 255, 255, 0));
 
         // кнопка CONTINUE
         g_actionButtonState = "CONTINUE";
@@ -3489,6 +3531,10 @@ static void ux_draw_frame()
     // эмоция — картинка (левый верхний угол)
     g_window->draw(g_sprEmotion);
 
+    // иконки ролей (атакер/защитник)
+    g_window->draw(g_sprBotRole);
+    g_window->draw(g_sprPlrRole);
+
     // подсказка игроку (если видима)
     if (g_hintVisible || g_hintFading)
         g_window->draw(g_hintText);
@@ -3744,6 +3790,10 @@ void ux_wait_gameover_continue()
     g_trumpSpr.setColor(sf::Color(255, 255, 255, 0));
 
     g_showTrumpSuit = true;
+
+    // показать иконки ролей (после Continue/сброса)
+    g_sprBotRole.setColor(sf::Color(255, 255, 255, 255));
+    g_sprPlrRole.setColor(sf::Color(255, 255, 255, 255));
 
     g_waitTimer = 0.f;
 

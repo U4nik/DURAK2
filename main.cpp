@@ -1309,6 +1309,10 @@ void print_ux_diff(const State &old, const State &st)
 {
     bool defender_took_table = false;
 
+    // отслеживаем смену ролей для иконок атакер/защитник
+    if (old.attacker != st.attacker)
+        ux_cmd("UPDATE_ROLES", {side_to_str(st.attacker)});
+
     // флаг показа подсказки (сбрасывается при новой игре)
     static bool hintShown = false;
 
@@ -2752,6 +2756,7 @@ int main()
         // вместо текстового "[UX] ..." — сразу в UX
         print_ux_diff(empty, st);
         ux_wait_all();
+        ux_cmd("UPDATE_ROLES", {side_to_str(st.attacker)});
 
         cout << "Init OK\n";
 
