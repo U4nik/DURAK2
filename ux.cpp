@@ -682,6 +682,7 @@ static bool g_moveReady = false;
 
 // масть козыря (для сортировки)
 static int g_trumpSuit = 0;
+static bool g_firstDeal = true;  // флаг первой раздачи (козырь ещё не известен)
 
 // таймер кадра
 static sf::Clock g_clock;
@@ -2007,7 +2008,7 @@ static void add_card_to_hand(
     if (owner == PLR && faceUp)
     {
         v.sprite.setTexture(texBack); // рубашкой вверх
-        v.flipMidFlight = true;       // перевернуть в полёте
+        v.flipMidFlight = !g_firstDeal; // при первой раздаче не переворачивать
     }
     else if (owner == PLR && !faceUp)
     {
@@ -2780,6 +2781,16 @@ void ux_run_command(const UxCommand &cmd)
         g_trumpSpr.setTexture(g_cardTex[c.suit][c.rank - 6]);
         g_trumpSpr.setColor(sf::Color(255, 255, 255, 255)); // мгновенно видимый
         g_trumpVisible = true;
+
+        // первая раздача: открыть карты игрока и отсортировать с учётом козыря
+        if (g_firstDeal)
+        {
+            g_firstDeal = false;
+            for (auto &v : g_vis_plr)
+                v.sprite.setTexture(g_cardTex[v.card.suit][v.card.rank - 6]);
+            if (!g_vis_plr.empty())
+                sort_hand(g_vis_plr, g_layout.center_x, g_layout.plr_y, g_handAnchorsPlrY);
+        }
     }
 
     else if (cmd.name == "UPDATE_DECK_SIZE")
@@ -3648,7 +3659,7 @@ void ux_process_frame()
         g_fireworks->update(dt);
     }
 
-    // WAIT — стоп-кадр
+// WAIT — стоп-кадр
     if (g_waitTimer > 0.f)
     {
         g_waitTimer -= dt;
@@ -3796,6 +3807,7 @@ void ux_wait_gameover_continue()
     g_sprPlrRole.setColor(sf::Color(255, 255, 255, 255));
 
     g_waitTimer = 0.f;
+    g_firstDeal = true;  // следующая игра начинается с первой раздачи
 
     // -----------------------------
     // ВОТ ЭТО — ГЛАВНОЕ
@@ -3879,6 +3891,7 @@ bool ux_is_menu_active()
 void ux_reset_visuals()
 {
     reset_all_visuals();
+    g_firstDeal = true;
     g_layout = load_layout();
     g_deckSpr.setPosition(g_layout.deck_pos);
     g_deckSpr.setRotation(g_layout.deck_angle);
