@@ -7,6 +7,7 @@
 #include <cmath>
 #include <random>
 #include <queue>
+#include <ctime>
 #include <windows.h>
 #include "ux.h"
 #include "salut.h"
@@ -686,6 +687,19 @@ static bool g_firstDeal = true;  // флаг первой раздачи (коз
 
 // таймер кадра
 static sf::Clock g_clock;
+static sf::Clock g_uiClock;                                                              // [FIX-guni] не restart-ится, живёт всю сессию
+static float g_actionButtonSpawnTime = 0.f;                                             // [FIX-guni] ms, когда появилась action-кнопка
+static float g_lastAnyClickMs = -10000.f;    // [FIX-guni] ms последнего ЛЮБОГО клика (принятого или отброшенного)
+// [CLICKLOG] лог нажатий кнопок для отлова stale-click бага (перезапись game.log)
+static std::ofstream g_clickLog("game.log");                                            // перезапись при новом запуске
+static std::string click_log_timestamp()
+{
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    char buf[20];
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    return buf;
+}
 
 // салют (Game Over)
 static FireworksManager *g_fireworks = nullptr;
@@ -2411,6 +2425,39 @@ static void ux_handle_events()
 
             if (g_uxMode == UxMode::WaitPlayerMove && g_pending.active)
             {
+                // [FIX-guni] ГЛОБАЛЬНЫЙ anti-double-click: ЛЮБОЙ клик продлевает cooldown
+                {
+                    float nowMs = g_uiClock.getElapsedTime().asMilliseconds();
+                    if (nowMs - g_lastAnyClickMs < 450.f)
+                    {
+                        g_clickLog << "[" << click_log_timestamp() << "] COOLDOWN_BLOCKED now=" << (int)nowMs
+                                   << " last=" << (int)g_lastAnyClickMs
+                                   << " interval=" << (nowMs - g_lastAnyClickMs) << "ms\n";
+                        g_clickLog.flush();
+                        g_lastAnyClickMs = nowMs;   // ОБНОВЛЯЕМ last даже для заблокированного — продлевает dead zone
+                        return;
+                    }
+                    g_lastAnyClickMs = nowMs;
+                }
+
+                // [FIX] защита от повторных кликов: если выбор уже сделан — игнорируем
+                if (g_moveReady)
+                    return;
+
+                // [FIX-guni] защита от stale click: кнопка появилась только что — игнор
+                if (g_sprAction.getColor().a > 0 &&
+                    g_uxMode == UxMode::WaitPlayerMove)
+                {
+                    float nowMs = g_uiClock.getElapsedTime().asMilliseconds();
+                    float age = nowMs - g_actionButtonSpawnTime;
+                    if (age < 250.f)
+                    {
+                        g_clickLog << "[" << click_log_timestamp() << "] FRESH_BLOCKED age=" << age << "ms state=" << g_actionButtonState << "\n";
+                        g_clickLog.flush();
+                        return;
+                    }
+                }
+
                 // --- выбор карты ---
                 // Находим ПРАВУЮ карту под курсором (как в ховере)
                 int clickedIndex = -1;
@@ -2429,11 +2476,19 @@ static void ux_handle_events()
                     std::string s = ux_card_to_string(g_vis_plr[clickedIndex].card);
                     int idx = ux_find_move_index_for_string(s);
 
-                    if (idx >= 0)
+                    if (idx >= 0 && !g_moveReady)
                     {
                         // допустимый ход
                         std::cout << "[UX] CHOSEN CARD " << s
                                   << " (move idx = " << idx << ")\n";
+                        // [CLICKLOG]
+                        {
+                            float nowMs = g_uiClock.getElapsedTime().asMilliseconds();
+                            g_clickLog << "[" << click_log_timestamp() << "] CARD_CLICK card=" << s
+                                       << " moveIdx=" << idx
+                                       << " age=" << (nowMs - g_actionButtonSpawnTime) << "ms\n";
+                            g_clickLog.flush();
+                        }
 
                         // скрываем подсказку
                         hide_hint_text();
@@ -2457,9 +2512,16 @@ static void ux_handle_events()
                     g_sprAction.getGlobalBounds().contains(mp))
                 {
                     int idx = ux_find_pass_index();
-                    if (idx >= 0)
+                    if (idx >= 0 && !g_moveReady)
                     {
                         std::cout << "[UX] CHOSEN PASS (idx = " << idx << ")\n";
+                        // [CLICKLOG]
+                        {
+                            float passNow = g_uiClock.getElapsedTime().asMilliseconds();
+                            g_clickLog << "[" << click_log_timestamp() << "] PASS_CLICK moveIdx=" << idx
+                                       << " age=" << (passNow - g_actionButtonSpawnTime) << "ms\n";
+                            g_clickLog.flush();
+                        }
                         g_pending.active = false;
                         g_uxMode = UxMode::Idle;
                         g_chosenMove = idx;
@@ -3004,6 +3066,11 @@ void ux_run_command(const UxCommand &cmd)
             g_actionButtonAlpha = 255.f;
             g_sprAction.setColor(sf::Color(255, 255, 255, 255));
             g_actionButtonWasVisible = true; // кнопка стала видима игроку
+            // [FIX-guni] фиксируем момент появления кнопки
+            g_actionButtonSpawnTime = g_uiClock.getElapsedTime().asMilliseconds();
+            // [CLICKLOG]
+            g_clickLog << "[" << click_log_timestamp() << "] BUTTON_SET state=" << g_actionButtonState << " spawnT=" << (int)g_actionButtonSpawnTime << "\n";
+            g_clickLog.flush();
 
             if (g_actionButtonState == "TAKE")
                 g_sprAction.setTexture(g_texTake);
@@ -3067,6 +3134,11 @@ void ux_run_command(const UxCommand &cmd)
         g_actionButtonState = "CONTINUE";
         g_sprAction.setTexture(g_texContinue);
         g_sprAction.setColor(sf::Color(255, 255, 255, 255));
+        // [FIX-guni] фиксируем момент появления кнопки
+        g_actionButtonSpawnTime = g_uiClock.getElapsedTime().asMilliseconds();
+        // [CLICKLOG]
+        g_clickLog << "[" << click_log_timestamp() << "] BUTTON_SET state=CONTINUE spawnT=" << (int)g_actionButtonSpawnTime << "\n";
+        g_clickLog.flush();
 
         // запускаем салют только для победы
         if (res == "PLR_WIN" && g_fireworks)
